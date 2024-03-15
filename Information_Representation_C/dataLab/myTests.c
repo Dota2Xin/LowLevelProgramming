@@ -42,9 +42,71 @@ void testTMax() {
     }
 }
 
+void testIsAscii() {
+    int success=1;
+    for(int i=0; i<=31; i++) {
+        int store1=isAsciiDigit(1<<i);
+        int store2=test_isAsciiDigit(1<<i);
+        if (store1!=store2) {
+            printf("Error, Input: %d, Output: %d\n", 1<<i, store1);
+            success=0;
+        }
+    }
+
+    for(int i=47; i<=58; i++) {
+        int store1=isAsciiDigit(i);
+        int store2=test_isAsciiDigit(i);
+        if (store1!=store2) {
+            printf("Error, Input: %d, Output: %d\n", i, store1);
+            success=0;
+        }
+    }
+    if (success==1) { 
+        printf("Worked\n");
+    }
+}
+
+void testConditional() {
+    int success=1;
+    for (int x=-1; x<=3; x++) {
+        for (int y=4; y<=10;y++) {
+            for (int z=4; z<=8;z++) {
+                int store1=conditional(x,y,z);
+                int store2=test_conditional(x,y,z);
+                if (store1!=store2) {
+                    printf("Error: Expected: %d, Got: %d, Inputs: %d,%d,%d\n", store1, store2,x,y,z);
+                    success=0;
+                }
+            }
+        }
+    }
+    if (success==1) {
+        printf("WORKED\n");
+    }
+}
+
+void testLeq() {
+    int success=1;
+    for (int x=0; x<=31; x++) {
+        for (int y=0; y<=31;y++) {
+                int store1=isLessOrEqual(1<<x,1<<y);
+                int store2=test_isLessOrEqual(1<<x,1<<y);
+                if (store1!=store2) {
+                    printf("Error: Expected: %d, Got: %d, Inputs: %d,%d,\n", store2, store1,1<<x,1<<y);
+                    success=0;
+                }
+        }
+    }
+    if (success==1) {
+        printf("WORKED\n");
+    }
+}
 int main(){
     //testBitXor();
     //testTMin();
-    testTMax();
+    //testTMax();
+    //testIsAscii();
+    //testConditional();
+    testLeq();
     return 0;
 }

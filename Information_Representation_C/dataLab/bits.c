@@ -1,3 +1,4 @@
+#include <stdio.h>
 /* 
  * CS:APP Data Lab 
  * 
@@ -180,6 +181,9 @@ int isTmax(int x) {
  *   Rating: 2
  */
 int allOddBits(int x) {
+  int a=x<<2;
+  int b=(x+(~(a)+1));
+
   return 2;
 }
 /* 
@@ -190,7 +194,7 @@ int allOddBits(int x) {
  *   Rating: 2
  */
 int negate(int x) {
-  return 2;
+  return ~x+1;
 }
 //3
 /* 
@@ -203,7 +207,12 @@ int negate(int x) {
  *   Rating: 3
  */
 int isAsciiDigit(int x) {
-  return 2;
+ int high=x-48;
+ int low=x-58;
+ int checkNeg=low>>31;
+ int checkPos=high>>31;
+ //printf("Negative Check: %d, Postiive Check: %d\n",checkNeg,checkPos);
+ return !((checkNeg+1)|checkPos);
 }
 /* 
  * conditional - same as x ? y : z 
@@ -213,7 +222,15 @@ int isAsciiDigit(int x) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-  return 2;
+  int storeVal=!x;
+  //2 if True 1 if False
+  int a=storeVal+1;
+  //0 if True, 111111111111... if False
+  int zeroCheck=a<<31;
+  //11111111 if True, 0 if False
+  int oneCheck=storeVal<<31;
+
+  return y&oneCheck+z&zeroCheck;
 }
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
@@ -223,7 +240,18 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isLessOrEqual(int x, int y) {
-  return 2;
+  //y-x
+  int b=y+(~x+1);
+
+  //overflow checking code
+  //Max ops:19
+  int checkXSign=x>>31;
+  int checkYSign=y>>31;
+  
+  //standard sign check if no overflow
+  int c=b>>31;
+
+  return !c;
 }
 //4
 /* 
