@@ -101,12 +101,44 @@ void testLeq() {
         printf("WORKED\n");
     }
 }
+
+void testLogicalNeg() {
+    int success=1;
+    for (int x=-4; x<=4; x++) {
+        int store1=logicalNeg(x);
+        int store2=!x;
+        if (store1!=store2) {
+            printf("Error: Expected: %d, Got: %d, Input: %d,\n", store2, store1,x);
+            success=0;
+        }
+    }
+    if (success==1) {
+        printf("WORKED\n");
+    }
+}
+
+void testHowManyBits() {
+    int success=1;
+    for (int x=-256; x<=256; x++) {
+        int store1=howManyBits(x);
+        int store2=test_howManyBits(x);
+        if (store1!=store2) {
+            printf("Error: Expected: %d, Got: %d, Input: %d,\n", store2, store1,x);
+            success=0;
+        }
+    }
+    if (success==1) {
+        printf("WORKED\n");
+    }
+}
 int main(){
     //testBitXor();
     //testTMin();
     //testTMax();
     //testIsAscii();
     //testConditional();
-    testLeq();
+    //testLeq();
+    //testLogicalNeg();
+    testHowManyBits();
     return 0;
 }
