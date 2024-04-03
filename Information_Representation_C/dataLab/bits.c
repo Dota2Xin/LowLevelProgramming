@@ -285,10 +285,7 @@ int logicalNeg(int x) {
  */
 //This function accidentallly counts the total number of bits lol, I'll fix that next time.
 int howManyBits(int x) {
-  //can cheese positives by just adding them with all the normal powers of two and then shifting by the requisite amount so it is 1 or 0
-  //then taking the sum
-  //for negatives have to think some more, I think it might be same thing but like 32- that or whatever so -1 gives you 1.
-  
+  /*
   int x2=x+(((~x+1)<<1)&(x>>31));
   //printf("Regular: %d, Abs: %d",x,x2);
   int runningCount= (x2&1)+((x2>>1)&1)+(x2>>2&1)+((x2>>3)&1)+((x2>>4)&1)+((x2>>5)&1)+((x2>>6)&1)+((x2>>7)&1)+((x2>>8)&1)
@@ -296,8 +293,17 @@ int howManyBits(int x) {
                   +((x2>>12)&1)+((x2>>13)&1)+((x2>>14)&1)+((x2>>15)&1)+((x2>>16)&1)+((x2>>17)&1)+((x2>>18)&1)+((x2>>19)&1)+((x2>>20)&1)
                   +((x2>>21)&1)+((x2>>22)&1)+((x2>>23)&1)+((x2>>24)&1)+((x2>>25)&1)+((x2>>26)&1)+((x2>>27)&1)+((x2>>28)&1)+((x2>>29)&1)
                   +((x2>>30)&1)+1;
-
-  return runningCount;
+  */
+  int x2=x+((((~x+1)<<1)-1)&(x>>31));
+  //Do the problem but on a strictly positive twos complement num, max ops 83
+  //Brute Force is to !x+!(x>>1)+!(x>>2)+(!(x>>3))+... then do 32-that or whatever, problem is that's 3 ops 30 times
+  int runningCount= (!x2)+(!(x2>>1))+!(x2>>2)+(!(x2>>3))+(!(x2>>4))+(!(x2>>5))+(!(x2>>6))+(!(x2>>7))+(!(x2>>8))
+                  +(!(x2>>9))+(!(x2>>10))+(!(x2>>11))
+                  +(!(x2>>12))+(!(x2>>13))+(!(x2>>14))+(!(x2>>15))+(!(x2>>16))+(!(x2>>17))+(!(x2>>18))+(!(x2>>19))+(!(x2>>20))
+                  +(!(x2>>21))+(!(x2>>22))+(!(x2>>23))+(!(x2>>24))+(!(x2>>25))+(!(x2>>26))+(!(x2>>27))+(!(x2>>28))+(!(x2>>29))
+                  +(!(x2>>30));
+  //it's like 5 over the limit but I can't see how you do this without counting. 
+  return 31-runningCount+1;
 }
 //float
 /* 
