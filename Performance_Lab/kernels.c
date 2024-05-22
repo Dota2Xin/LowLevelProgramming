@@ -30,6 +30,7 @@ team_t team = {
 /* 
  * naive_rotate - The naive baseline version of rotate 
  */
+
 char naive_rotate_descr[] = "naive_rotate: Naive baseline implementation";
 void naive_rotate(int dim, pixel *src, pixel *dst) 
 {
@@ -44,10 +45,26 @@ void naive_rotate(int dim, pixel *src, pixel *dst)
  * rotate - Your current working version of rotate
  * IMPORTANT: This is the version you will be graded on
  */
+//#define RIDX(i,j,n) ((i)*(n)+(j))
 char rotate_descr[] = "rotate: Current working version";
 void rotate(int dim, pixel *src, pixel *dst) 
 {
-    naive_rotate(dim, src, dst);
+    int i=0;
+    int j=0;
+    int startRid=0;
+    int nextRid=0;
+    int preCalc=dim*dim;
+
+    for (i = 0; i < dim; i++) {
+        startRid=i*dim;
+	    for (j = 0; j < dim; j+=4) {
+            nextRid=preCalc-dim*(1+j)+i;
+	        dst[nextRid] = src[startRid+j];
+            dst[nextRid-dim]=src[startRid+j+1];
+            dst[nextRid-2*dim]=src[startRid+j+2];
+            dst[nextRid-3*dim]=src[startRid+j+3];
+        }
+    }
 }
 
 /*********************************************************************
