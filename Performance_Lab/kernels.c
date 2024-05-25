@@ -46,6 +46,7 @@ void naive_rotate(int dim, pixel *src, pixel *dst)
  * IMPORTANT: This is the version you will be graded on
  */
 //#define RIDX(i,j,n) ((i)*(n)+(j))
+//Loop unrolls aren't doing anything ddx
 char rotate_descr[] = "rotate: Current working version";
 void rotate(int dim, pixel *src, pixel *dst) 
 {
@@ -55,10 +56,18 @@ void rotate(int dim, pixel *src, pixel *dst)
     int nextRid=0;
     int preCalc=dim*dim;
 
-    for (i = 0; i < dim; i++) {
+    for (i = 0; i < dim; i+=2) {
         startRid=i*dim;
 	    for (j = 0; j < dim; j+=4) {
             nextRid=preCalc-dim*(1+j)+i;
+	        dst[nextRid] = src[startRid+j];
+            dst[nextRid-dim]=src[startRid+j+1];
+            dst[nextRid-2*dim]=src[startRid+j+2];
+            dst[nextRid-3*dim]=src[startRid+j+3];
+        }
+        startRid+=dim;
+        for (j = 0; j < dim; j+=4) {
+            nextRid=preCalc-dim*(1+j)+i+1;
 	        dst[nextRid] = src[startRid+j];
             dst[nextRid-dim]=src[startRid+j+1];
             dst[nextRid-2*dim]=src[startRid+j+2];
@@ -158,6 +167,40 @@ static pixel avg(int dim, int i, int j, pixel *src)
     return current_pixel;
 }
 
+static pixel myAvg(int dim, int i, int j, pixel *src) 
+{
+    int ii, jj;
+    pixel_sum sum;
+    pixel current_pixel;
+    int minI=min(i+1,dim-1);
+    int minJ=min(j+1,dim-1);
+    int maxI=max(i-1,0);
+    int maxJ=max(j-1,0);
+    initialize_pixel_sum(&sum);
+    for(ii = maxI; ii <= minI; ii++) {
+	    for(jj =maxJ; jj <= minJ; jj++) {
+	        accumulate_sum(&sum, src[RIDX(ii, jj, dim)]);
+        }
+    }
+
+    assign_sum_to_pixel(&current_pixel, sum);
+    return current_pixel;
+}
+
+void updateSum(int dim, int i, int j, pixel *src, pixel_sum *sum) {
+    sum->red += (int) (src[RIDX(i,j,dim)].red+src[RIDX(i+1,j,dim)].red+src[RIDX(i-1,j,dim)].red);
+    sum->blue += (int) (src[RIDX(i,j,dim)].blue+src[RIDX(i+1,j,dim)].blue+src[RIDX(i-1,j,dim)].blue);
+    sum->green +=(int) (src[RIDX(i,j,dim)].green+src[RIDX(i+1,j,dim)].green+src[RIDX(i-1,j,dim)].green);
+    sum->num+=3;
+    return;
+}
+
+void makeValue(pixel *p, pixel_sum sum1, pixel_sum sum2, pixel_sum sum3) {
+    p->red = (unsigned short) ((sum1.red+sum2.red+sum3.red)/(sum1.num+sum2.num+sum3.num));
+    p->blue = (unsigned short) ((sum1.blue+sum2.blue+sum3.blue)/(sum1.num+sum2.num+sum3.num));
+    p->green = (unsigned short) ((sum1.green+sum2.green+sum3.green)/(sum1.num+sum2.num+sum3.num));
+    return;
+}
 /******************************************************
  * Your different versions of the smooth kernel go here
  ******************************************************/
@@ -177,6 +220,7 @@ void naive_smooth(int dim, pixel *src, pixel *dst)
     }
 }
 
+
 /*
  * smooth - Your current working version of smooth. 
  * IMPORTANT: This is the version you will be graded on
@@ -184,7 +228,48 @@ void naive_smooth(int dim, pixel *src, pixel *dst)
 char smooth_descr[] = "smooth: Current working version";
 void smooth(int dim, pixel *src, pixel *dst) 
 {
-    naive_smooth(dim, src, dst);
+    int i, j;
+    for(j=0; j<dim; j++) {
+        dst[RIDX(0,j,dim)]=avg(dim,0,j,src);
+    }
+    for(j=0; j<dim; j++) {
+        dst[RIDX(dim-1,j,dim)]=avg(dim,dim-1,j,src);
+    }
+    for(i=1; i<dim-1; i++) {
+        dst[RIDX(i,0,dim)]=avg(dim,i,0,src);
+    }
+    for(i=1; i<dim-1; i++) {
+        dst[RIDX(i, dim-1,dim)]=avg(dim,i,dim-1,src);
+    }
+    pixel_sum left;
+    pixel_sum on;
+    pixel_sum right;
+    pixel_sum temp;
+    initialize_pixel_sum(&left);
+    initialize_pixel_sum(&right);
+    initialize_pixel_sum(&on);
+    initialize_pixel_sum(&temp);
+    pixel storePixel;
+    for (i = 1; i < dim-1; i++) {
+        initialize_pixel_sum(&left);
+        initialize_pixel_sum(&right);
+        initialize_pixel_sum(&on);
+        updateSum(dim, i, 0, src, &left);
+        updateSum(dim, i, 1, src, &on);
+        updateSum(dim, i, 2, src, &right);
+        makeValue(&storePixel, left,on,right);
+        dst[RIDX(i,1,dim)]=storePixel;
+	    for (j = 2; j < dim-1; j++) {
+            initialize_pixel_sum(&temp);
+            pixel currentPixel;
+            updateSum(dim,i,j+1,src,&temp);
+            makeValue(&currentPixel,on,right,temp);
+	        dst[RIDX(i, j, dim)] = currentPixel;
+            left=on;
+            on=right;
+            right=temp;
+        }
+    }
 }
 //idea for smooth, do running count of stuff above and below and in your row and then essentially move along and scan and whatnot. 
 //So we do sum over top and then would add and subtract neighbor values, basically instead of doing a new set of 9 computations for
