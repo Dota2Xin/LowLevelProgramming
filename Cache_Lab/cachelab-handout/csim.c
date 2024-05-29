@@ -17,7 +17,6 @@ int power(int base, int exp) {
 struct line {
     int valid;
     long tag;
-    char *block;
 };
 
 struct set {
@@ -30,7 +29,7 @@ struct set {
 struct cache {
     int s;
     int b;
-    long E;
+    int E;
     int tagLen;
     struct set *sets;
 };
@@ -38,7 +37,7 @@ struct cache {
 struct cacheUpdate {
     int hits;
     int misses;
-    int evictions
+    int evictions;
 };
 
 void updateLeastRecentlyUsed(int *leastRecentlyUsed, int mostRecentlyUsed, long len) {
@@ -58,36 +57,39 @@ void updateLeastRecentlyUsed(int *leastRecentlyUsed, int mostRecentlyUsed, long 
     return;
 }
 
-struct cache* makeCache(int s, int b, long E) {
+struct cache* makeCache(int s, int b, int E) {
     struct cache mainCache;
     mainCache.s=s;
     mainCache.b=b;
     mainCache.E=E;
-    struct set setList[s];
+    mainCache.sets=(struct set *)malloc(s*sizeof(struct set));
+    //struct set setList[s];
     for(int i=0; i<s; i++) {
         struct set currentSet;
-        struct line lineList[E];
-        int leastReuArr[E];
+        currentSet.lines=(struct line *)malloc(E*sizeof(struct line));
+        currentSet.leastRecentlyUsed=(int *)malloc(E*sizeof(int));
+        //struct line lineList[E];
+        //int leastReuArr[E];
         for(int j=0; j<E; i++) {
-            leastReuArr[i]=i;
+            //leastReuArr[i]=i;
             struct line currentLine;
             currentLine.valid=0;
             currentLine.tag=0;
-            char byteList[b];
-            char *bytePtr=&byteList;
-            currentLine.block=bytePtr;
-            lineList[j]=currentLine;
+            currentSet.lines[j]=currentLine;
+            currentSet.leastRecentlyUsed[j]=j;
+            //lineList[j]=currentLine;
         }
-        currentSet.leastRecentlyUsed=&leastReuArr;
-        struct line *linesPtr=&lineList;
-        currentSet.lines=linesPtr;
+        //currentSet.leastRecentlyUsed=&leastReuArr;
+        //struct line *linesPtr=&lineList;
+        //currentSet.lines=linesPtr;
         currentSet.lruIndex=0;
-        setList[i]=currentSet;
+        //setList[i]=currentSet;
+        mainCache.sets[i]=currentSet;
     }
 
     mainCache.tagLen=64-(b+s);
-    struct set *setPtr=&setList;
-    mainCache.sets=setPtr;
+    //struct set *setPtr=&setList;
+    //mainCache.sets=setPtr;
     struct cache *cachePointer;
     cachePointer=&mainCache;
     return cachePointer;
@@ -99,7 +101,7 @@ void simulateLoad(struct cache *mainCache, unsigned long address, struct cacheUp
     unsigned long bytes=0;
     int s=mainCache->s;
     int b=mainCache->b;
-    long E=mainCache->E;
+    int E=mainCache->E;
 
     //break up address into different parts with some bit manip
     unsigned long bitStore=power(2,b)-1;
@@ -124,7 +126,7 @@ void simulateLoad(struct cache *mainCache, unsigned long address, struct cacheUp
     //if tag not found see if we have valid cache lines open in the set and put it in
     for(int i=0; i<E; i++) {
         struct line currentLine=currentSet.lines[i];
-        long currentTag=currentLine.tag;
+        //long currentTag=currentLine.tag;
         int valid=currentLine.valid;
         if (valid==0) {
            currentSet.lines[i].valid=1;
@@ -161,12 +163,13 @@ void simulateCache() {
 
 int main(int argc, char *argv[])
 {
+    //handles file inputs
     char verbose=0;
     char help=0;
-    int flags, opt;
+    int opt;
     char *inputFile;
     int s, b;
-    long E;
+    int E;
     while((opt=getopt(argc,argv,"hvs:E:b:t:")) !=-1) {
         switch(opt) {
             case 'h':
@@ -185,10 +188,94 @@ int main(int argc, char *argv[])
                 b=atoi(optarg);
                 break;
             case 't':
-                inputFile=atoi(optarg);
+                inputFile=optarg;
                 break;
+            case '?':
+                fprintf(stderr, "Unknown error occurred\n");
+                return 1;
+            default:
+                fprintf(stderr, "Unknown error occurred\n");
+                return 1;
         }
     }
-    printSummary(0, 0, 0);
+
+    if(help==1) {
+        printf("You asked for help ddx");
+    }
+    if(verbose==1) {
+        printf("this is more verbose than it would have been had you not selected that option...");
+    }
+
+    //open file, check if its real, and store amount of lines
+    FILE *file2=fopen(inputFile, "r");
+
+    if(file2==NULL) {
+        perror("Error Opening File");
+        return EXIT_FAILURE;
+    }
+
+    char currentString[40];
+    int count=0;
+
+    while(fgets(currentString,40,file2)) {
+        count++;     
+    }
+
+    fclose(file2);
+
+    //reopen file and parse for info
+    FILE *file=fopen(inputFile, "r");
+    //Type of operation to be performed, 1=load, 2=write, 3=modify, 4=none
+    int operations[count];
+    long addresses[count];
+    int i=0;
+    while(fgets(currentString, 40, file)) {
+        if(currentString[0]=='I') {
+            operations[i]=4;
+        }
+        else if(currentString[1]=='L') {
+            operations[i]=1;
+        }
+        else if(currentString[1]=='S') {
+            operations[i]=2;
+        }
+        else if(currentString[1]=='M') {
+            operations[i]=3;
+        }
+        int j=3;
+        while(currentString[j]!=',') {
+            j++;
+        }
+        char subString[j-3];
+        j=3;
+        while(currentString[j]!=',') {
+            subString[j-3]=currentString[j];
+        }
+        char **endptr=NULL;
+        long address=strtol(subString,endptr,16);
+        addresses[i]=address;
+        i++;
+    }
+
+    //make and simulate the cache with instructions from file
+    struct cache *mainCache=makeCache(s, b, E);
+    struct cacheUpdate storeUpdate;
+    storeUpdate.hits=0;
+    storeUpdate.misses=0;
+    storeUpdate.evictions=0;
+
+    for(int k=0; k<count; k++) {
+        if(operations[k]==1) {
+            simulateLoad(mainCache, addresses[k], &storeUpdate);
+        }
+        else if (operations[k]==2) {
+            simulateStore(mainCache, addresses[k], &storeUpdate);
+        }
+        else if (operations[k]==3) {
+            simulateModify(mainCache, addresses[k], &storeUpdate);
+        }
+    }
+
+    printSummary(storeUpdate.hits, storeUpdate.misses, storeUpdate.evictions);
     return 0;
 }
