@@ -6,8 +6,8 @@
 #include <getopt.h>
 
 
-int power(int base, int exp) {
-    int store=1;
+unsigned long power(int base, int exp) {
+    unsigned long store=1;
     for (int i=0; i<exp; i++) {
         store=store*base;
     }
@@ -58,41 +58,41 @@ void updateLeastRecentlyUsed(int *leastRecentlyUsed, int mostRecentlyUsed, long 
 }
 
 struct cache* makeCache(int s, int b, int E) {
-    struct cache mainCache;
-    mainCache.s=s;
-    mainCache.b=b;
-    mainCache.E=E;
-    mainCache.sets=(struct set *)malloc(s*sizeof(struct set));
+    struct cache *mainCache=(struct cache *)malloc(sizeof(struct cache));
+    mainCache->s=s;
+    mainCache->b=b;
+    mainCache->E=E;
+    int maxSets=1;
+    for(int k=0; k<s; k++) {
+        maxSets=maxSets*2;
+    } 
+    mainCache->sets=(struct set *)malloc(maxSets*sizeof(struct set));
     //struct set setList[s];
-    for(int i=0; i<s; i++) {
-        struct set currentSet;
-        currentSet.lines=(struct line *)malloc(E*sizeof(struct line));
-        currentSet.leastRecentlyUsed=(int *)malloc(E*sizeof(int));
+    for(int i=0; i<maxSets; i++) {
+        mainCache->sets[i].lines=(struct line *)malloc(E*sizeof(struct line));
+        mainCache->sets[i].leastRecentlyUsed=(int *)malloc(E*sizeof(int));
         //struct line lineList[E];
         //int leastReuArr[E];
-        for(int j=0; j<E; i++) {
+        for(int j=0; j<E; j++) {
             //leastReuArr[i]=i;
-            struct line currentLine;
-            currentLine.valid=0;
-            currentLine.tag=0;
-            currentSet.lines[j]=currentLine;
-            currentSet.leastRecentlyUsed[j]=j;
+            mainCache->sets[i].lines[j].valid=0;
+            mainCache->sets[i].lines[j].tag=0;
+            mainCache->sets[i].leastRecentlyUsed[j]=j;
             //lineList[j]=currentLine;
         }
         //currentSet.leastRecentlyUsed=&leastReuArr;
         //struct line *linesPtr=&lineList;
         //currentSet.lines=linesPtr;
-        currentSet.lruIndex=0;
+        mainCache->sets[i].lruIndex=0;
         //setList[i]=currentSet;
-        mainCache.sets[i]=currentSet;
     }
 
-    mainCache.tagLen=64-(b+s);
+    mainCache->tagLen=64-(b+s);
     //struct set *setPtr=&setList;
     //mainCache.sets=setPtr;
-    struct cache *cachePointer;
-    cachePointer=&mainCache;
-    return cachePointer;
+    //struct cache *cachePointer;
+    //cachePointer=&mainCache;
+    return mainCache;
 }
 
 void simulateLoad(struct cache *mainCache, unsigned long address, struct cacheUpdate *cacheValues) {
@@ -111,28 +111,24 @@ void simulateLoad(struct cache *mainCache, unsigned long address, struct cacheUp
     tagVal=(address-bytes-setIndex)>>(b+s);
 
     //look for matching tag
-    struct set currentSet=mainCache->sets[setIndex];
     for(int i=0; i<E; i++) {
-        struct line currentLine=currentSet.lines[i];
-        long currentTag=currentLine.tag;
-        int valid=currentLine.valid;
+        long currentTag=mainCache->sets[setIndex].lines[i].tag;
+        int valid=mainCache->sets[setIndex].lines[i].valid;
         if (currentTag==tagVal && valid==1) {
             cacheValues->hits+=1;
-            updateLeastRecentlyUsed(currentSet.leastRecentlyUsed, i, E);
+            updateLeastRecentlyUsed(mainCache->sets[setIndex].leastRecentlyUsed, i, E);
             return;
         }
     }
-
     //if tag not found see if we have valid cache lines open in the set and put it in
     for(int i=0; i<E; i++) {
-        struct line currentLine=currentSet.lines[i];
         //long currentTag=currentLine.tag;
-        int valid=currentLine.valid;
+        int valid=mainCache->sets[setIndex].lines[i].valid;
         if (valid==0) {
-           currentSet.lines[i].valid=1;
-           currentSet.lines[i].tag=tagVal;
+           mainCache->sets[setIndex].lines[i].valid=1;
+           mainCache->sets[setIndex].lines[i].tag=tagVal;
            cacheValues->misses+=1;
-           updateLeastRecentlyUsed(currentSet.leastRecentlyUsed, i, E);
+           updateLeastRecentlyUsed(mainCache->sets[setIndex].leastRecentlyUsed, i, E);
            return;
         }
     }
@@ -140,9 +136,10 @@ void simulateLoad(struct cache *mainCache, unsigned long address, struct cacheUp
     //evict and update the least recently used value
     cacheValues->misses+=1;
     cacheValues->evictions+=1;
-    int indexToEvict=currentSet.leastRecentlyUsed[0];
-    currentSet.lines[indexToEvict].tag=tagVal;
-    updateLeastRecentlyUsed(currentSet.leastRecentlyUsed, indexToEvict, E);
+    printf("Here it is %d", mainCache->sets[setIndex].leastRecentlyUsed[0]);
+    int indexToEvict=mainCache->sets[setIndex].leastRecentlyUsed[0];
+    mainCache->sets[setIndex].lines[indexToEvict].tag=tagVal;
+    updateLeastRecentlyUsed(mainCache->sets[setIndex].leastRecentlyUsed, indexToEvict, E);
     return;
 
 
@@ -160,6 +157,16 @@ void simulateModify(struct cache *mainCache, unsigned long address, struct cache
 void simulateCache() {
     return;
 } 
+
+void freeCache(struct cache *mainCache) {
+    for(int i=0; i<mainCache->s; i++) {
+        free(mainCache->sets[i].lines);
+        free(mainCache->sets[i].leastRecentlyUsed);
+    }
+    free(mainCache->sets);
+    free(mainCache);
+    return;
+}
 
 int main(int argc, char *argv[])
 {
@@ -198,7 +205,6 @@ int main(int argc, char *argv[])
                 return 1;
         }
     }
-
     if(help==1) {
         printf("You asked for help ddx");
     }
@@ -222,7 +228,6 @@ int main(int argc, char *argv[])
     }
 
     fclose(file2);
-
     //reopen file and parse for info
     FILE *file=fopen(inputFile, "r");
     //Type of operation to be performed, 1=load, 2=write, 3=modify, 4=none
@@ -250,20 +255,19 @@ int main(int argc, char *argv[])
         j=3;
         while(currentString[j]!=',') {
             subString[j-3]=currentString[j];
+            j++;
         }
         char **endptr=NULL;
         long address=strtol(subString,endptr,16);
         addresses[i]=address;
         i++;
     }
-
     //make and simulate the cache with instructions from file
     struct cache *mainCache=makeCache(s, b, E);
     struct cacheUpdate storeUpdate;
     storeUpdate.hits=0;
     storeUpdate.misses=0;
     storeUpdate.evictions=0;
-
     for(int k=0; k<count; k++) {
         if(operations[k]==1) {
             simulateLoad(mainCache, addresses[k], &storeUpdate);
@@ -274,8 +278,9 @@ int main(int argc, char *argv[])
         else if (operations[k]==3) {
             simulateModify(mainCache, addresses[k], &storeUpdate);
         }
-    }
 
+    }
+    freeCache(mainCache);
     printSummary(storeUpdate.hits, storeUpdate.misses, storeUpdate.evictions);
     return 0;
 }
