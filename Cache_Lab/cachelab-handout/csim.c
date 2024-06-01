@@ -136,7 +136,7 @@ void simulateLoad(struct cache *mainCache, unsigned long address, struct cacheUp
     //evict and update the least recently used value
     cacheValues->misses+=1;
     cacheValues->evictions+=1;
-    printf("Here it is %d", mainCache->sets[setIndex].leastRecentlyUsed[0]);
+    //printf("Here it is %d", mainCache->sets[setIndex].leastRecentlyUsed[0]);
     int indexToEvict=mainCache->sets[setIndex].leastRecentlyUsed[0];
     mainCache->sets[setIndex].lines[indexToEvict].tag=tagVal;
     updateLeastRecentlyUsed(mainCache->sets[setIndex].leastRecentlyUsed, indexToEvict, E);

@@ -22,13 +22,45 @@ int is_transpose(int M, int N, int A[N][M], int B[M][N]);
 char transpose_submit_desc[] = "Transpose submission";
 void transpose_submit(int M, int N, int A[N][M], int B[M][N])
 {
+    int i, j, tmp;
+    int tmp2, tmp3, tmp4;
+    //square matrix=simpler algorithm
+    //also both divisible by 4 so we can do fourfold unrolling for this.
+    for (i = 0; i < N; i++) {
+        for (j = 0; j < M; j+=4) {
+            tmp = A[i][j];
+            tmp2=A[i][j+1];
+            tmp3=A[i][j+2];
+            tmp4=A[i][j+3];
+            B[j][i]=tmp;
+            B[j+1][i] = tmp2;
+            B[j+2][i]=tmp3;
+            B[j+3][i]=tmp4;
+        }
+    }  
 }
 
 /* 
  * You can define additional transpose functions below. We've defined
  * a simple one below to help you get started. 
  */ 
-
+int min(int a, int b) {
+    if (a<b) {
+        return a;
+    }
+    else {
+        return b;
+    }
+}
+char trans_desc[]="Diagonal Access Transpose";
+void trans_diag(int M, int N, int A[N][M], int B[M][N]) {
+    int i,j, tmp;
+    for(int i=0; i<2*M-1; i++) {
+        for(int j=0; j<min(i+1,2*M-i-1);j++) {
+            return;
+        }
+    }
+}
 /* 
  * trans - A simple baseline transpose function, not optimized for the cache.
  */
@@ -43,7 +75,6 @@ void trans(int M, int N, int A[N][M], int B[M][N])
             B[j][i] = tmp;
         }
     }    
-
 }
 
 /*
