@@ -52,14 +52,29 @@ int min(int a, int b) {
         return b;
     }
 }
-char trans_desc[]="Diagonal Access Transpose";
+char trans_desc_diag[]="Diagonal Access Transpose";
 void trans_diag(int M, int N, int A[N][M], int B[M][N]) {
     int i,j, tmp;
-    for(int i=0; i<2*M-1; i++) {
-        for(int j=0; j<min(i+1,2*M-i-1);j++) {
-            return;
+    for(i=0; i<2*M-1; i++) {
+        int maxVal=min(i+1,2*M-i-1);
+        int otherVal=i-M+1;
+        for(j=0; j<maxVal;j++) {
+            if(i+1>M) {
+                tmp = A[otherVal+j][M-1-j];
+                //printf("Val: %d, Index1:%d Index2:%d  \n",tmp, otherVal+j, M-1-j);
+                //fflush(stdout);
+                B[M-1-j][otherVal+j]=tmp;
+
+            } else {
+                tmp = A[j][maxVal-j-1];
+                //printf("Val: %d, Index1:%d Index2:%d  \n",tmp, j, maxVal-j-1);
+                //fflush(stdout);
+                B[maxVal-1-j][j]=tmp;
+            }
         }
     }
+    //int check=is_transpose(M, N, A, B);
+    //printf("%d", check);
 }
 /* 
  * trans - A simple baseline transpose function, not optimized for the cache.
@@ -86,11 +101,13 @@ void trans(int M, int N, int A[N][M], int B[M][N])
  */
 void registerFunctions()
 {
+    //registerTransFunction(trans_diag, trans_desc_diag);
     /* Register your solution function */
     registerTransFunction(transpose_submit, transpose_submit_desc); 
 
     /* Register any additional transpose functions */
     registerTransFunction(trans, trans_desc); 
+
 
 }
 
