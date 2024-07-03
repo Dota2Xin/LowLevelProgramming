@@ -22,24 +22,57 @@ int is_transpose(int M, int N, int A[N][M], int B[M][N]);
 char transpose_submit_desc[] = "Transpose submission";
 void transpose_submit(int M, int N, int A[N][M], int B[M][N])
 {
-    int i, j, tmp;
-    int tmp2, tmp3, tmp4;
+    int i, j,k,l,tmp;
+    int blockSize=8;
     //square matrix=simpler algorithm
     //also both divisible by 4 so we can do fourfold unrolling for this.
-    for (i = 0; i < N; i++) {
-        for (j = 0; j < M; j+=4) {
-            tmp = A[i][j];
-            tmp2=A[i][j+1];
-            tmp3=A[i][j+2];
-            tmp4=A[i][j+3];
-            B[j][i]=tmp;
-            B[j+1][i] = tmp2;
-            B[j+2][i]=tmp3;
-            B[j+3][i]=tmp4;
+    int padSize=2;
+    for(i=0; i<N; i+=blockSize) {
+        for(j=0; j<M; j+=blockSize) {
+            for(k=0; k<blockSize; k++) {
+                for(l=0; l<blockSize; l++) {
+                    tmp=A[(i*padSize)%N+k][j+l];
+                    B[j+l][(i*padSize)%N+k]=tmp;
+                }
+            }
         }
-    }  
+    }
 }
 
+char trans_desc_block[] = "Block Transpose";
+void transpose_block(int M, int N, int A[N][M], int B[M][N]) {
+    int i, j,k,l;
+    int blockSize=8;
+    int tmp1, tmp2, tmp3 ,tmp4, tmp5, tmp6, tmp7, tmp8;
+    //square matrix=simpler algorithm
+    //also both divisible by 4 so we can do fourfold unrolling for this.
+    //int padSize=9*blockSize;
+    for(i=0; i<N; i+=blockSize) {
+        for(j=0; j<M; j+=blockSize) {
+            for(k=i; k<i+blockSize; k++) {
+                for(l=j; l<j+blockSize; l+=8) {
+                    tmp1=A[k][l];
+                    tmp2=A[k][l+1];
+                    tmp3=A[k][l+2];
+                    tmp4=A[k][l+3];
+                    tmp5=A[k][l+4];
+                    tmp6=A[k][l+5];
+                    tmp7=A[k][l+6];
+                    tmp8=A[k][l+7];
+                    B[l][k]=tmp1;
+                    B[l+1][k]=tmp2;
+                    B[l+2][k]=tmp3;
+                    B[l+3][k]=tmp4;
+                    B[l+4][k]=tmp5;
+                    B[l+5][k]=tmp6;
+                    B[l+6][k]=tmp7;
+                    B[l+7][k]=tmp8;
+                    //B[l][k]=A[k][l];
+                }
+            }
+        }
+    }
+}
 /* 
  * You can define additional transpose functions below. We've defined
  * a simple one below to help you get started. 
@@ -103,10 +136,11 @@ void registerFunctions()
 {
     //registerTransFunction(trans_diag, trans_desc_diag);
     /* Register your solution function */
+    registerTransFunction(transpose_block, trans_desc_block);
     registerTransFunction(transpose_submit, transpose_submit_desc); 
 
     /* Register any additional transpose functions */
-    registerTransFunction(trans, trans_desc); 
+   // registerTransFunction(trans, trans_desc); 
 
 
 }
