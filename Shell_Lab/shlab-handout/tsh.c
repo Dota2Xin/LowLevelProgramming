@@ -167,61 +167,69 @@ void eval(char *cmdline)
 {
     //Parses the command line by breaking it up into words that we can then use
     int count=0;
-    char prevChar=" ";
+    char prevChar=' ';
     int wordCount=0;
     int lastword=0;
     while(count<MAXLINE) {
-        if(prevChar==" ") {
-            if (cmdline[count]== " ") {
-                count++;
-            }
-            else {
-                prevChar=cmdline[count];
-                wordCount++;
-                count++;
-                lastword=count;
-            }
+        if(prevChar==' ') {
+            prevChar=cmdline[count];
+            wordCount++;
+            count++;
+            lastword=count;
         }
         else {
+            prevChar=cmdline[count];
             count++;
         }
-    }
-    char** words=(char*)malloc(wordCount,sizeof(char*));
-    int wordLength=0;
-    wordCount=0;
-    prevChar=" ";
-    while(count<MAXLINE) {
-        if(prevChar==" ") {
-            if (cmdline[count]== " ") {
-                count++;
-            }
-            else {
-                char* currentWord=(char)malloc(wordLength, sizeof(char));
-                for(int i=0; i<wordLength; i++) {
-                    currentWord[i]=cmdline[count-1-wordLength+i];
 
-                }
-                words[wordCount]=currentWord;
-                wordCount++;
-                prevChar=cmdline[count];
-                wordLength=1;
-                count++;
+        if (prevChar=='\n') {
+            break;
+        }
+    }
+    printf("%i \n", wordCount);
+    fflush(stdout);
+    char** words=malloc(wordCount*sizeof(char*));
+    int wordLength=0;
+    wordCount=1;
+    prevChar='p' ;
+    while(count<MAXLINE) {
+        printf("%c \n", prevChar);
+        fflush(stdout); 
+        if(prevChar==' ') {
+            char* currentWord=malloc(wordLength*sizeof(char));
+            for(int i=0; i<wordLength; i++) {
+                currentWord[i]=cmdline[count-1-wordLength+i];
+
             }
+            words[wordCount]=currentWord;
+            wordCount++;
+            prevChar=cmdline[count];
+            wordLength=1;
+            count++;
         }
         else {
+            prevChar=cmdline[count];
             count++;
             wordLength++;
         }
+        if (prevChar=='\n') {
+            break;
+        }
     }
-    char* currentWord=(char)malloc(wordLength, sizeof(char));
+    char* currentWord=malloc(wordLength*sizeof(char));
     for(int i=0; i<wordLength; i++) {
         currentWord[i]=cmdline[lastword+i];
     }
     words[wordCount]=currentWord;
-
+    printf("%i \n", wordCount);
+    fflush(stdout);
+    for(int i=0; i<wordCount; i++) {
+        printf("%s \n", words[i]);
+        fflush(stdout);
+    }
     //processes the parsed words to do something
     int check=builtin_cmd(words);
-    if(check==0) {
+    if(check==1) {
         return;
     }
 
@@ -292,7 +300,18 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv) 
 {
-
+    if (strcmp(argv[0], "quit")==0) {
+        exit(1);
+        return 1;
+    }
+    else if (strcmp(argv[0], "jobs")==0) {
+        listjobs(jobs);
+        return 1;
+    }
+    else if (strcmp(argv[0], "fg")==0 || strcmp(argv[0], "bg")==0) {
+        do_bgfg(argv);
+        return 1;
+    }
     return 0;     /* not a builtin command */
 }
 
