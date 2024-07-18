@@ -85,6 +85,31 @@ void app_error(char *msg);
 typedef void handler_t(int);
 handler_t *Signal(int signum, handler_t *handler);
 
+
+pid_t Fork(void) {
+    pid_t pid;
+    if((pid=fork())<0) {
+        unix_error("Fork Error");
+    } 
+    return pid;
+}
+
+void Execv(const char *pathname, char *const argv[]) {
+    if(execv(pathname, argv)==-1) {
+        unix_error("Execve Error");
+    }
+}
+
+void Sigprocmask(int how, const sigset_t*set, sigset_t *oldset) {
+    if(sigprocmask(how, set, oldset)==-1) {
+        unix_error("Sigprocmask Error");
+    }
+}
+void Sigaddset(sigset_t *set, int signum) {
+    if(sigaddset(set, signum)==-1) {
+        unix_error("Siggaddset Error");
+    }
+}
 /*
  * main - The shell's main routine 
  */
@@ -166,6 +191,7 @@ int main(int argc, char **argv)
 void eval(char *cmdline) 
 {
     //Parses the command line by breaking it up into words that we can then use
+    /*
     int count=0;
     char prevChar=' ';
     int wordCount=0;
@@ -192,6 +218,8 @@ void eval(char *cmdline)
         }
     }
     char** words=malloc(wordCount*sizeof(char*));
+    */
+    /*
     count=0;
     int wordLength=0;
     wordCount=0;
@@ -231,6 +259,9 @@ void eval(char *cmdline)
     }
     currentWord[wordLength]='\0';
     words[wordCount-1]=currentWord;
+    */
+    char* words[MAXLINE]; 
+    int bg=parseline(cmdline, words);
     //for(int i=0; i<wordCount; i++) {
     //    printf("%s \n", words[i]);
     //    fflush(stdout);
@@ -238,17 +269,31 @@ void eval(char *cmdline)
     //processes the parsed words to do something
     int check=builtin_cmd(words);
     if(check==1) {
-        for(int i=0; i<wordCount; i++) {
-            free(words[i]);
-        }
-        free(words);
         return;
     }
     
-    for(int i=0; i<wordCount; i++) {
-        free(words[i]);
+    sigset_t set;
+    sigemptyset(&set);
+    Sigaddset(set, SIGCHILD);
+
+    char* process=words[0];
+    //race condition block
+    Sigprocmask(SIG_BLOCK, set, NULL);
+    pid_t child=Fork();
+    if (child==0) {
+        Execv(process, words);
+        exit(0);
     }
-    free(words);
+    if(bg==0) {
+        addjob(jobs,child,1,cmdline);
+        Sigprocmask(SIG_UNBLOCK, set, NULL);
+        waitfg(child);
+    }  
+    else {
+        addjob(jobs, child, 0, cmdline);
+        Sigprocmask(SIG_UNBLOCK,set,NULL);
+    }
+
     return;
 }
 
@@ -343,6 +388,7 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
+    
     return;
 }
 
