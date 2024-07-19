@@ -191,75 +191,7 @@ int main(int argc, char **argv)
 void eval(char *cmdline) 
 {
     //Parses the command line by breaking it up into words that we can then use
-    /*
-    int count=0;
-    char prevChar=' ';
-    int wordCount=0;
-    int lastword=0;
-    while(count<MAXLINE) {
-        if(prevChar==' ') {
-            if (!(cmdline[count]==' ')) {
-                prevChar=cmdline[count];
-                wordCount++;
-                lastword=count;
-            }
-            else {
-                prevChar=cmdline[count];
-                count++;
-            }
-        }
-        else {
-            prevChar=cmdline[count];
-            count++;
-        }
-
-        if (prevChar=='\n') {
-            break;
-        }
-    }
-    char** words=malloc(wordCount*sizeof(char*));
-    */
-    /*
-    count=0;
-    int wordLength=0;
-    wordCount=0;
-    prevChar='p' ;
-    while(count<MAXLINE) {
-        if(prevChar==' ') {
-            if (!(cmdline[count]==' ')) {
-                char* currentWord=malloc((wordLength)*sizeof(char));
-                for(int i=0; i<wordLength-1; i++) {
-                    currentWord[i]=cmdline[count-wordLength+i];
-                }
-                currentWord[wordLength]='\0';
-                words[wordCount]=currentWord;
-                wordCount++;
-                prevChar=cmdline[count];
-                wordLength=1;
-                count++;
-            }
-            else {
-                prevChar=cmdline[count];
-                count++;
-            }
-        }
-        else {
-            prevChar=cmdline[count];
-            count++;
-            wordLength++;
-        }
-        if (prevChar=='\n') {
-            break;
-        }
-    }
-    wordCount++;
-    char* currentWord=malloc((wordLength)*sizeof(char));
-    for(int i=0; i<wordLength-1; i++) {
-        currentWord[i]=cmdline[lastword+i];
-    }
-    currentWord[wordLength]='\0';
-    words[wordCount-1]=currentWord;
-    */
+    
     char* words[MAXLINE]; 
     int bg=parseline(cmdline, words);
     //for(int i=0; i<wordCount; i++) {
@@ -274,26 +206,27 @@ void eval(char *cmdline)
     
     sigset_t set;
     sigemptyset(&set);
-    Sigaddset(set, SIGCHILD);
+    Sigaddset(&set, SIGCHLD);
 
     char* process=words[0];
     //race condition block
-    Sigprocmask(SIG_BLOCK, set, NULL);
+    Sigprocmask(SIG_BLOCK, &set, NULL);
     pid_t child=Fork();
     if (child==0) {
         Execv(process, words);
         exit(0);
     }
     if(bg==0) {
-        addjob(jobs,child,1,cmdline);
-        Sigprocmask(SIG_UNBLOCK, set, NULL);
+        addjob(jobs,child,FG,cmdline);
+        Sigprocmask(SIG_UNBLOCK, &set, NULL);
         waitfg(child);
     }  
     else {
-        addjob(jobs, child, 0, cmdline);
-        Sigprocmask(SIG_UNBLOCK,set,NULL);
+        addjob(jobs, child, BG, cmdline);
+        Sigprocmask(SIG_UNBLOCK,&set,NULL);
     }
-
+    //printf("GOT HERE");
+    //fflush(stdout);
     return;
 }
 
@@ -360,12 +293,18 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv) 
 {
+    sigset_t set;
+    sigemptyset(&set);
+    Sigaddset(&set, SIGCHLD);
     if (strcmp(argv[0], "quit")==0) {
         exit(1);
         return 1;
     }
     else if (strcmp(argv[0], "jobs")==0) {
+        Sigprocmask(SIG_BLOCK, &set, NULL);
         listjobs(jobs);
+        Sigprocmask(SIG_UNBLOCK,&set,NULL);
+        fflush(stdout);
         return 1;
     }
     else if (strcmp(argv[0], "fg")==0 || strcmp(argv[0], "bg")==0) {
@@ -388,7 +327,11 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
-    
+    while(fgpid(jobs)==pid) {
+        sleep(.001);
+    }
+    //printf("LEFT WAITFG \n");
+    //fflush(stdout);
     return;
 }
 
@@ -405,6 +348,17 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig) 
 {
+    //printf("Reached sigchld handler\n");
+    //fflush(stdout);
+    int olderrno=errno;
+    pid_t currentChild;
+    while((currentChild=waitpid(-1, NULL,0))>0) {
+        deletejob(jobs, currentChild);
+    }
+    if(errno !=ECHILD) {
+        unix_error("SIGCHLD error");
+    }
+    errno=olderrno;
     return;
 }
 
