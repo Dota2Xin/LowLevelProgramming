@@ -503,12 +503,35 @@ void baseRemove(removeNode) {
     baseRemove(removeNode);
 }
 
-//may need to add a version of this for insert as well.
-void handleDoubleBlack(void* colorNode) {
-
+//handles the double black case, the nullCheck is for if we let a null node be a double black
+void handleDoubleBlack(void* colorNode, char nullCheck) {
+    //we are not null
+    char* sibling;
+    char* parent;
+    if(nullCheck==0) {
+        parent=GET_PARENT(colorNode);
+        if (parent==0) {
+            return;
+        }
+        if(GET_SIZE(colorNode)<=GET_SIZE(parent)) {
+            sibling=GET_RIGHT_CHILD(parent);
+        } else {
+            sibling=GET_LEFT_CHILD(parent);
+        }
+    } else {
+        parent=colorNode;
+        //in null case the node passed in is the parent of the null node rather than the node 
+        if(GET_LEFT_CHILD(colorNode)==0) {
+            sibling=GET_RIGHT_CHILD(colorNode);
+        } else {
+            sibling=GET_LEFT_CHILD(colorNode);
+        }
+    }
+    //ideally we can just work with siblings and parents from here on out with no need to think about our current state
 }
 //now do red-black deletion operations understanding that we either have a leaf or a node with a child and parent.
 //handle the casework accordingly. 
+//handles the actual deletion but not 
 void deleteRecolor(void* removeNode) {
 
     if(GET_PARENT(removeNode)==0) {
@@ -533,19 +556,22 @@ void deleteRecolor(void* removeNode) {
             return;
         }
 
-        //due to our coloring rules the sibling always exists in this case. 
-        if (GET_COLOR(sibling)==0) {
-            char* sLeft=GET_LEFT_CHILD(sibling);
-            char* sRight=GET_RIGHT_CHILD(sibling);
-            if((sLeft==0 || GET_COLOR(sLeft)==0) && (sRight==0 || GET_COLOR(sRight)==0)) {
-                //double black case
+        handleColoringDelete(parent, 1);
+        /*
+            //due to our coloring rules the sibling always exists in this case. 
+            if (GET_COLOR(sibling)==0) {
+                char* sLeft=GET_LEFT_CHILD(sibling);
+                char* sRight=GET_RIGHT_CHILD(sibling);
+                if((sLeft==0 || GET_COLOR(sLeft)==0) && (sRight==0 || GET_COLOR(sRight)==0)) {
+                    //double black case
+                }
+                return;
             }
-            return;
-        }
 
         if (GET_COLOR(sibling)==1) {
             return;
         }
+            */
     }
 
     //right child only
@@ -562,7 +588,7 @@ void deleteRecolor(void* removeNode) {
             }
             return;
         }
-
+        handleColoringDelete(right, 0);
 
     }
 
@@ -578,7 +604,7 @@ void deleteRecolor(void* removeNode) {
             }
             return;
         }
-
+    handleColoringDelete(left,0);
     //no double child case because bst standard delete always has you do more swaps if two children.
     return;
 }
