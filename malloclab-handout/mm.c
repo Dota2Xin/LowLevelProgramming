@@ -425,6 +425,7 @@ void* insertRecolor(void* newNode) {
         PUT_COLOR(uncle, 0);
         PUT_COLOR(grandparent, 1);
         insertRecolor(grandparent);
+        return;
     }
 
     //these transformations work irregardless of uncle 
@@ -487,6 +488,7 @@ void baseRemove(removeNode) {
         //note that swap also swaps the color to preserve tree rules.
         swap(removeNode, swapNode);
         baseRemove(removeNode);
+        return;
     }
 
     if(LEFT_CHILD(removeNode)==0) {
@@ -496,11 +498,13 @@ void baseRemove(removeNode) {
         char* swapNode=getPreorder(RIGHT_CHILD(removeNode));
         swap(removeNode, swapNode);
         baseRemove(removeNode);
+        return;
     }
 
     char* swapNode=getPreorder(RIGHT_CHILD(removeNode));
     swap(removeNode, swapNode);
     baseRemove(removeNode);
+    return;
 }
 
 //handles the double black case, the nullCheck is for if we let a null node be a double black
@@ -527,7 +531,43 @@ void handleDoubleBlack(void* colorNode, char nullCheck) {
             sibling=GET_LEFT_CHILD(colorNode);
         }
     }
-    //ideally we can just work with siblings and parents from here on out with no need to think about our current state
+    //now we handle every sibling color/child pair case
+    if (GET_LEFT_CHILD(sibling)==0 && GET_RIGHT_CHILD(sibling)==0) {
+        //by the rules of the tree you can't not have kids and be red as well with a double black case. 
+        PUT_COLOR(sibling, 1);
+        handleDoubleBlack(parent, 0);
+        return;
+    }
+
+    if(GET_COLOR(sibling)==1) {
+        //if you're red you have two children and they are both black and not null by tree rules
+        if (GET_SIZE(sibling)<=GET_SIZE(parent)) {
+            rightRotate(parent);
+        } else {
+            leftRotate(parent);
+        }
+        PUT_COLOR(parent, 1);
+        PUT_COLOR(sibling, 0);
+        return;
+    }
+
+    //check if there are two children
+    if (GET_LEFT_CHILD(sibling)==0 && GET_RIGHT_CHILD(sibling)==0) {
+        char* left=GET_LEFT_CHILD(sibling);
+        char* right=GET_RIGHT_CHILD(sibling);
+        //one red child case
+        if (GET_COLOR(left)==1) {
+
+        }
+        if(GET_COLOR(right)==1 ) {
+
+        }
+        PUT_COLOR(sibling, 1);
+        handleDoubleBlack(parent, 0);
+        return;
+    }
+    //now we know its one child handle left and right case
+
 }
 //now do red-black deletion operations understanding that we either have a leaf or a node with a child and parent.
 //handle the casework accordingly. 
