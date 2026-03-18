@@ -508,7 +508,7 @@ void baseRemove(removeNode) {
 }
 
 //handles the double black case, the nullCheck is for if we let a null node be a double black
-void handleDoubleBlack(void* colorNode, char nullCheck) {
+void handleColoringDelete(void* colorNode, char nullCheck) {
     //we are not null
     char* sibling;
     char* parent;
@@ -535,7 +535,7 @@ void handleDoubleBlack(void* colorNode, char nullCheck) {
     if (GET_LEFT_CHILD(sibling)==0 && GET_RIGHT_CHILD(sibling)==0) {
         //by the rules of the tree you can't not have kids and be red as well with a double black case. 
         PUT_COLOR(sibling, 1);
-        handleDoubleBlack(parent, 0);
+        handleColoringDelete(parent, 0);
         return;
     }
 
@@ -557,16 +557,69 @@ void handleDoubleBlack(void* colorNode, char nullCheck) {
         char* right=GET_RIGHT_CHILD(sibling);
         //one red child case
         if (GET_COLOR(left)==1) {
-
+            if(GET_SIZE(sibling)<=GET_SIZE(parent)) {
+                rightRotate(parent);
+                PUT_COLOR(left, 0);
+                return;
+            } else {
+                rightRotate(sibling);
+                PUT_COLOR(sibling, 1);
+                PUT_COLOR(left, 0);
+                leftRotate(parent);
+                PUT_COLOR(sibling, 0);
+                return; 
+            }
         }
         if(GET_COLOR(right)==1 ) {
-
+            if(GET_SIZE(sibling)<=GET_SIZE(parent)) {
+                leftRotate(sibling);
+                PUT_COLOR(sibling, 1);
+                PUT_COLOR(right, 0);
+                rightRotate(parent);
+                PUT_COLOR(sibling, 0);
+                return;
+            } else {
+                leftRotate(parent);
+                PUT_COLOR(right, 0);
+                return;
+            }
         }
         PUT_COLOR(sibling, 1);
-        handleDoubleBlack(parent, 0);
+        handleColoringDelete(parent, 0);
         return;
     }
     //now we know its one child handle left and right case
+    if(GET_LEFT_CHILD(sibling)==0) {
+        char* right=GET_RIGHT_CHILD(sibling);
+         if(GET_SIZE(sibling)<=GET_SIZE(parent)) {
+            leftRotate(sibling);
+            PUT_COLOR(sibling, 1);
+            PUT_COLOR(right, 0);
+            rightRotate(parent);
+            PUT_COLOR(sibling, 0);
+            return;
+        } else {
+            leftRotate(parent);
+            PUT_COLOR(right, 0);
+            return;
+        }
+    }
+
+    if(GET_RIGHT_CHILD(sibling)==0) {
+        char* left=GET_LEFT_CHILD(sibling);
+        if(GET_SIZE(sibling)<=GET_SIZE(parent)) {
+            rightRotate(parent);
+            PUT_COLOR(left, 0);
+            return;
+        } else {
+            rightRotate(sibling);
+            PUT_COLOR(sibling, 1);
+            PUT_COLOR(left, 0);
+            leftRotate(parent);
+            PUT_COLOR(sibling, 0);
+            return;
+        }
+    }
 
 }
 //now do red-black deletion operations understanding that we either have a leaf or a node with a child and parent.
