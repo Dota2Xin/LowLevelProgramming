@@ -97,7 +97,54 @@ void *getPostorder(void *root);
 void *getPreorder(void *root);
 void *searchSize(void *root, size_t size);
 void *recurse(void *root, void *lastLarger, size_t size);
+void print_binary_tree(void *root);
  
+
+//print tree
+void print_binary_tree(void *root)
+{
+    if (root == 0) {
+        printf("[empty tree]\n");
+        return;
+    }
+
+    /* Queue entries: pointer + depth + side label */
+    typedef struct { void *node; int depth; char side; } QEntry;
+
+    QEntry queue[512];
+    int head = 0, tail = 0;
+
+    queue[tail++] = (QEntry){root, 0, 'R'};  /* R = root */
+
+    int cur_depth = -1;
+
+    while (head < tail) {
+        QEntry e = queue[head++];
+        void *n  = e.node;
+
+        /* New depth = new row */
+        if (e.depth != cur_depth) {
+            cur_depth = e.depth;
+            printf("\n[depth %d]  ", cur_depth);
+        }
+
+        /* Print node: size, color, which side it is */
+        char color  = GET_COLOR(n) == BLACK ? 'B' : 'R';
+        void *left  = (void *)GET_LEFT_CHILD(n);
+        void *right = (void *)GET_RIGHT_CHILD(n);
+        void *par   = (void *)GET_PARENT(n);
+
+        printf("%c:sz=%lu(%c,p=%lu)  ",
+               e.side,
+               GET_SIZE(n),
+               color,
+               par ? GET_SIZE(par) : 0);
+
+        if (left)  queue[tail++] = (QEntry){left,  e.depth + 1, 'L'};
+        if (right) queue[tail++] = (QEntry){right, e.depth + 1, 'R'};
+    }
+    printf("\n");
+}
 /* ------------------------------------------------------------------ */
 /* RB-tree invariant checker                                           */
 /* ------------------------------------------------------------------ */
@@ -532,9 +579,11 @@ static void test_ascending_inserts(void)
     void *root = make_node(s); s += 32;
     PUT_COLOR(root, BLACK);
     PUT_LEFT(root, 0); PUT_RIGHT(root, 0); PUT_PARENT(root, 0);
- 
-    for (int i = 0; i < 9; i++, s += 32)
+    for (int i = 0; i < 9; i++, s += 32) {
         addNode(find_root(root), make_node(s), s);
+        //printf("%i", i);
+        //print_binary_tree(find_root(root));
+    }
     root = find_root(root);
  
     if (is_valid_rbt(root))
@@ -648,6 +697,314 @@ static void test_stress_insert_search(void)
 }
  
 /* ------------------------------------------------------------------ */
+/* Delete helpers                                                       */
+/* ------------------------------------------------------------------ */
+ 
+/*
+ * Build a standard tree from an array of sizes, returning the root.
+ * sizes[0] is used as the first (black) root.
+ */
+static void *build_tree(size_t *sizes, int n)
+{
+    void *root = make_node(sizes[0]);
+    PUT_COLOR(root, BLACK);
+    PUT_LEFT(root, 0); PUT_RIGHT(root, 0); PUT_PARENT(root, 0);
+    for (int i = 1; i < n; i++)
+        addNode(find_root(root), make_node(sizes[i]), sizes[i]);
+    return find_root(root);
+}
+ 
+/* Walk the tree and return the node whose block size == target, or NULL */
+static void *find_node(void *node, size_t target)
+{
+    if (node == 0) return 0;
+    size_t s = GET_SIZE(node);
+    if (s == target) return node;
+    if (target < s)  return find_node((void *)GET_LEFT_CHILD(node),  target);
+                     return find_node((void *)GET_RIGHT_CHILD(node), target);
+}
+ 
+/* Count nodes in the tree */
+static int count_nodes(void *node)
+{
+    if (node == 0) return 0;
+    return 1 + count_nodes((void *)GET_LEFT_CHILD(node))
+             + count_nodes((void *)GET_RIGHT_CHILD(node));
+}
+ 
+/* ------------------------------------------------------------------ */
+/* Delete tests                                                         */
+/* ------------------------------------------------------------------ */
+ 
+/* 20. Delete the only node – tree becomes empty */
+static void test_delete_only_node(void)
+{
+    TEST("Delete only node – tree is empty afterwards");
+    arena_reset();
+ 
+    void *root = make_node(64);
+    PUT_COLOR(root, BLACK);
+    PUT_LEFT(root, 0); PUT_RIGHT(root, 0); PUT_PARENT(root, 0);
+ 
+    removeNode(root);
+    /* After removing the sole node its parent is still 0 and both
+     * children should be 0 – the caller is responsible for nulling
+     * their root pointer, so we just verify the node is isolated.   */
+    int ok = (GET_LEFT_CHILD(root) == 0) &&
+             (GET_RIGHT_CHILD(root) == 0);
+    if (ok) PASS(); else FAIL("node not properly isolated after delete");
+}
+ 
+/* 21. Delete a red leaf – RBT valid, node count decreases by 1 */
+static void test_delete_red_leaf(void)
+{
+    TEST("Delete red leaf – valid RBT, count decreases");
+    arena_reset();
+ 
+    /* Tree: 64(B) with 32(R) left and 96(R) right – 96 is a red leaf */
+    size_t sizes[] = {64, 32, 96};
+    void *root = build_tree(sizes, 3);
+    int before = count_nodes(root);
+ 
+    void *target = find_node(root, 96);
+    if (!target) { FAIL("could not find node 96"); return; }
+ 
+    removeNode(target);
+    root = find_root(root == target ? (void *)(GET_PARENT(root) ? (void *)GET_PARENT(root) : root) : root);
+    /* Refresh root – after deleting a leaf root doesn't change */
+    root = find_node(root, 64) ? find_root(root) : find_root(root);
+ 
+    int after = count_nodes(root);
+    if (is_valid_rbt(root) && after == before - 1)
+        PASS();
+    else
+        FAIL("invalid RBT or wrong count after red leaf delete");
+}
+ 
+/* 22. Delete a black leaf – requires rebalancing, RBT must stay valid */
+static void test_delete_black_leaf(void)
+{
+    TEST("Delete black leaf – valid RBT after rebalancing");
+    arena_reset();
+ 
+    /*
+     * Insert enough nodes so we get a black leaf.
+     * With sizes {64,32,96,16,48} the node 16 ends up black.
+     */
+    size_t sizes[] = {64, 32, 96, 16, 48};
+    void *root = build_tree(sizes, 5);
+ 
+    void *target = find_node(root, 16);
+    if (!target || GET_COLOR(target) != BLACK) {
+        /* If the tree shaped differently just skip with a note */
+        printf("SKIP (node 16 not black in this tree shape)\n");
+        tests_run--; /* don't count as fail */
+        return;
+    }
+    int before = count_nodes(root);
+    removeNode(target);
+    root = find_root(find_node(root, 64) ? root : root);
+ 
+    if (is_valid_rbt(root) && count_nodes(root) == before - 1)
+        PASS();
+    else
+        FAIL("invalid RBT or wrong count after black leaf delete");
+}
+ 
+/* 23. Delete root node – new root must be black */
+static void test_delete_root(void)
+{
+    TEST("Delete root – new root is black");
+    arena_reset();
+ 
+    size_t sizes[] = {64, 32, 96};
+    void *root = build_tree(sizes, 3);
+ 
+    /* Keep a reference to a non-root node so we can find the new root */
+    void *non_root = find_node(root, 32);
+    removeNode(root);
+    void *new_root = find_root(non_root);
+ 
+    if (new_root != 0 && GET_COLOR(new_root) == BLACK && is_valid_rbt(new_root))
+        PASS();
+    else
+        FAIL("new root is not black or tree invalid after root delete");
+}
+ 
+/* 24. Delete node with one child – child must be promoted correctly */
+static void test_delete_one_child(void)
+{
+    TEST("Delete node with one child – RBT valid, correct count");
+    arena_reset();
+ 
+    /*
+     * Build a tree where one node has exactly one child.
+     * {64,32,96,80} → 80 is the only child of 96 (right child).
+     * After inserting, 96 should have just a left child 80.
+     */
+    size_t sizes[] = {64, 32, 96, 80};
+    void *root = build_tree(sizes, 4);
+    int before = count_nodes(root);
+ 
+    void *target = find_node(root, 96);
+    if (!target) { FAIL("could not find node 96"); return; }
+ 
+    /* Confirm it has exactly one child */
+    int has_left  = GET_LEFT_CHILD(target)  != 0;
+    int has_right = GET_RIGHT_CHILD(target) != 0;
+    if (has_left == has_right) {
+        printf("SKIP (node 96 doesn't have exactly one child in this shape)\n");
+        tests_run--;
+        return;
+    }
+ 
+    removeNode(target);
+    /* find a surviving node to locate the new root */
+    void *survivor = find_node(root, 64);
+    if (!survivor) survivor = find_node(root, 32);
+    void *new_root = find_root(survivor);
+ 
+    if (is_valid_rbt(new_root) && count_nodes(new_root) == before - 1)
+        PASS();
+    else
+        FAIL("invalid RBT or wrong count after one-child delete");
+}
+ 
+/* 25. Delete node with two children – RBT valid, correct count */
+static void test_delete_two_children(void)
+{
+    TEST("Delete node with two children – RBT valid, correct count");
+    arena_reset();
+ 
+    size_t sizes[] = {64, 32, 96, 16, 48, 80, 128};
+    void *root = build_tree(sizes, 7);
+    int before = count_nodes(root);
+ 
+    /* Node 32 has both 16 and 48 as children */
+    void *target = find_node(root, 32);
+    if (!target || GET_LEFT_CHILD(target) == 0 || GET_RIGHT_CHILD(target) == 0) {
+        printf("SKIP (node 32 doesn't have two children in this shape)\n");
+        tests_run--;
+        return;
+    }
+ 
+    removeNode(target);
+    void *new_root = find_root(find_node(root, 64));
+ 
+    if (is_valid_rbt(new_root) && count_nodes(new_root) == before - 1)
+        PASS();
+    else
+        FAIL("invalid RBT or wrong count after two-child delete");
+}
+ 
+/* 26. Delete all nodes one by one – tree must stay valid at every step */
+static void test_delete_all_one_by_one(void)
+{
+    TEST("Delete all nodes one by one – RBT valid at every step");
+    arena_reset();
+ 
+    size_t sizes[] = {64, 32, 96, 16, 48, 80, 128, 8, 24};
+    int N = 9;
+    void *root = build_tree(sizes, N);
+ 
+    int ok = 1;
+    for (int remaining = N; remaining > 1; remaining--) {
+        /* Always delete the current minimum (leftmost) – it exercises
+         * red leaf, black leaf, and one-child cases across iterations */
+        void *min = getPreorder(root);
+        removeNode(min);
+ 
+        /* Find a surviving node to re-anchor the root */
+        void *anchor = 0;
+        for (int i = 0; i < N && anchor == 0; i++)
+            anchor = find_node(root, sizes[i]);   /* root may have moved */
+ 
+        if (!anchor) break;   /* last node was just deleted */
+        root = find_root(anchor);
+ 
+        if (!is_valid_rbt(root)) {
+            printf("\n  FAIL: invalid after deleting min with %d nodes remaining",
+                   remaining - 1);
+            ok = 0;
+            break;
+        }
+    }
+ 
+    if (ok) PASS(); else FAIL("RBT invariant broken during sequential deletes");
+}
+ 
+/* 27. Interleaved inserts and deletes – RBT valid throughout */
+static void test_interleaved_insert_delete(void)
+{
+    TEST("Interleaved inserts and deletes – RBT valid throughout");
+    arena_reset();
+ 
+    size_t init[] = {128, 64, 192, 32, 96, 160, 256};
+    void *root = build_tree(init, 7);
+ 
+    int ok = 1;
+ 
+    /* Delete 64, insert 72, delete 192, insert 200, delete 32 */
+    size_t to_delete[] = {64, 192, 32};
+    size_t to_insert[] = {72, 200};
+ 
+    void *d = find_node(root, 64);
+    if (d) removeNode(d);
+    root = find_root(find_node(root, 128));
+    if (!is_valid_rbt(root)) { ok = 0; goto done27; }
+ 
+    addNode(root, make_node(72), 72);
+    root = find_root(root);
+    if (!is_valid_rbt(root)) { ok = 0; goto done27; }
+ 
+    d = find_node(root, 192);
+    if (d) removeNode(d);
+    root = find_root(find_node(root, 128));
+    if (!is_valid_rbt(root)) { ok = 0; goto done27; }
+ 
+    addNode(root, make_node(200), 200);
+    root = find_root(root);
+    if (!is_valid_rbt(root)) { ok = 0; goto done27; }
+ 
+    d = find_node(root, 32);
+    if (d) removeNode(d);
+    root = find_root(find_node(root, 128));
+    if (!is_valid_rbt(root)) { ok = 0; goto done27; }
+ 
+done27:
+    if (ok) PASS(); else FAIL("RBT invariant broken during interleaved ops");
+}
+ 
+/* 28. Delete then search – deleted size must no longer be found */
+static void test_delete_then_search(void)
+{
+    TEST("Delete then search – deleted size no longer found");
+    arena_reset();
+ 
+    size_t sizes[] = {64, 32, 96, 128, 48};
+    void *root = build_tree(sizes, 5);
+ 
+    /* Confirm 96 is present before delete */
+    void *before = searchSize(root, 96);
+    if (!before || GET_SIZE(before) != 96) {
+        FAIL("node 96 not found before delete");
+        return;
+    }
+ 
+    void *target = find_node(root, 96);
+    removeNode(target);
+    root = find_root(find_node(root, 64));
+ 
+    /* After deletion, searching for exactly 96 should return 128
+     * (the next larger block), not 96 */
+    void *after = searchSize(root, 96);
+    int ok = is_valid_rbt(root) &&
+             (after == 0 || GET_SIZE(after) != 96);
+ 
+    if (ok) PASS(); else FAIL("deleted node still returned by searchSize");
+}
+ 
+/* ------------------------------------------------------------------ */
 /* main                                                                 */
 /* ------------------------------------------------------------------ */
  
@@ -676,6 +1033,18 @@ int main(void)
     test_search_single_node();
     test_pack_color_roundtrip();
     test_stress_insert_search();
+
+    printf("\n--- Delete ---\n");
+    test_delete_only_node();
+    test_delete_red_leaf();
+    test_delete_black_leaf();
+    test_delete_root();
+    test_delete_one_child();
+    test_delete_two_children();
+    test_delete_all_one_by_one();
+    test_interleaved_insert_delete();
+    test_delete_then_search();
+
  
     printf("\n========================================\n");
     printf("  Results: %d / %d passed\n", tests_passed, tests_run);

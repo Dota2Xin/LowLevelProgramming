@@ -1,5 +1,3 @@
 !#/bin/bash/
 
-gcc test.c -o test
-./test
-rm test
+gcc -Wall -Wextra -g -o rbtree_test rbTreeTest.c test.c 

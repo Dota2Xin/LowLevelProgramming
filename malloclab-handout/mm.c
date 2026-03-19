@@ -292,7 +292,7 @@ void rightRotate(void* root) {
     char* temp=GET_LEFT_CHILD(root);
     char* temp2=GET_RIGHT_CHILD(temp);
     char* parent=GET_PARENT(root);
-    PUT_LEFT(root, temp);
+    PUT_LEFT(root, temp2);
     PUT_RIGHT(temp, root);
     PUT_PARENT(root, temp);
     
@@ -390,14 +390,14 @@ Every node is either red or black.
 */
 void* insertRecolor(void* newNode) {
     char* parent=GET_PARENT(newNode);
-    char* grandparent=GET_PARENT(parent);
 
-    //root==newNode
     if (parent==0) {
         PUT_COLOR(newNode, 0);
         return newNode;
     }
 
+    char* grandparent=GET_PARENT(parent);
+    
     //your parent is the root, root is always black, so we return immediately.  
     if (grandparent==0) {
         return newNode;

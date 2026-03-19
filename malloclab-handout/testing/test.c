@@ -133,12 +133,13 @@ void leftRotate(void* root) {
     char* temp2;
     if(GET_LEFT_CHILD(temp)!= 0) {
         temp2=GET_LEFT_CHILD(temp);
+        PUT_PARENT(temp2, root);
     } else {
         temp2=0;
     }
     char* parent=GET_PARENT(root);
     PUT_RIGHT(root, temp2);
-    PUT_LEFT(temp, root);r
+    PUT_LEFT(temp, root);
     PUT_PARENT(root, temp);
     
     if (parent== 0) {
@@ -160,11 +161,12 @@ void rightRotate(void* root) {
     char* temp2;
     if(GET_RIGHT_CHILD(temp)!= 0) {
         temp2=GET_RIGHT_CHILD(temp);
+        PUT_PARENT(temp2, root);
     } else {
         temp2=0;
     }
     char* parent=GET_PARENT(root);
-    PUT_LEFT(root, temp);
+    PUT_LEFT(root, temp2);
     PUT_RIGHT(temp, root);
     PUT_PARENT(root, temp);
     
@@ -197,13 +199,13 @@ void swap(void* node1, void* node2) {
     PUT_COLOR(node1, GET_COLOR(node2));
     PUT_COLOR(node2, tempColor);
 
-    if(GET_SIZE(node2)<=parent2) {
+    if(GET_SIZE(node2)<=GET_SIZE(parent2)) {
             PUT_LEFT(parent2, node1);
         } else {
             PUT_RIGHT(parent2, node1);
         }
     if (parent1!=0) {
-        if(GET_SIZE(node1)<=parent1) {
+        if(GET_SIZE(node1)<=GET_SIZE(parent1)) {
             PUT_LEFT(parent1, node2);
         } else {
             PUT_RIGHT(parent1, node2);
@@ -213,24 +215,14 @@ void swap(void* node1, void* node2) {
 }
 //SHOULD HAVE A COMMAND TO PUT RED/BLACK BIT IN POINTER HEADERS FOR USE HERE
 void* addNode(void* root, void* newNode, size_t size) {
+    PUT(newNode, PACK_COLOR(GET_SIZE(newNode),1, GET_ALLOC(newNode) ));
     baseAdd(root, newNode, size);
     insertRecolor(newNode);
     return NULL;
 }
 
 void baseAdd(void* root, void* newNode, size_t size) {
-    PUT(newNode, PACK_COLOR(GET_SIZE(newNode),1, GET_ALLOC(newNode) ));
-    if (GET_SIZE(root)==size) {
-        char* left=GET_LEFT_CHILD(root);
-        PUT_LEFT(root, newNode);
-        PUT_LEFT(newNode, left);
-        PUT_PARENT(newNode, root);
-        if(left!=0) {
-            PUT_PARENT(left, newNode);
-        }
-    }
-
-    if (GET_SIZE(root)<newNode) {
+    if (GET_SIZE(root)<size) {
         if(GET_RIGHT_CHILD(root)!=0) {
             baseAdd(GET_RIGHT_CHILD(root), newNode, size);
         } else {
@@ -241,7 +233,7 @@ void baseAdd(void* root, void* newNode, size_t size) {
         }
     }
 
-    if(GET_SIZE(root)>newNode) {
+    if(GET_SIZE(root)>=size) {
         if(GET_LEFT_CHILD(root)!=0) {
             baseAdd(GET_LEFT_CHILD(root), newNode, size);
         } else {
@@ -264,7 +256,6 @@ Every node is either red or black.
 */
 void insertRecolor(void* newNode) {
     char* parent=GET_PARENT(newNode);
-    char* grandparent=GET_PARENT(parent);
 
     //root==newNode
     if (parent==0) {
@@ -272,6 +263,7 @@ void insertRecolor(void* newNode) {
         return;
     }
 
+    char* grandparent=GET_PARENT(parent);
     //your parent is the root, root is always black, so we return immediately.  
     if (grandparent==0) {
         return;
