@@ -121,6 +121,7 @@ size_t a=PACK_COLOR(32, 1, 0);
 */
 
 /////////RED BLACK TREE METHODS////////////
+//When we put into the main code add something that will keep track of the root in the tree.
 /*
 Possible Optimizations (dig into this bag if tree appears to be slowing program down):
 1. Store child state bits in the extra space of our nodes so that we don't have to do if statements or else statements to
@@ -339,7 +340,7 @@ void removeNode(void* removeNode) {
     return;
 }
 
-void baseRemove(removeNode) {
+void baseRemove(void* removeNode) {
     //deal with leaf case first
     if(GET_LEFT_CHILD(removeNode)==0 && GET_RIGHT_CHILD(removeNode)==0) {
         return;
@@ -462,7 +463,7 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
             PUT_COLOR(sibling, 1);
             PUT_COLOR(right, 0);
             rightRotate(parent);
-            PUT_COLOR(sibling, 0);
+            //PUT_COLOR(sibling, 0);
             return;
         } else {
             leftRotate(parent);
@@ -482,7 +483,7 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
             PUT_COLOR(sibling, 1);
             PUT_COLOR(left, 0);
             leftRotate(parent);
-            PUT_COLOR(sibling, 0);
+            //PUT_COLOR(sibling, 0);
             return;
         }
     }
@@ -516,6 +517,7 @@ void deleteRecolor(void* removeNode) {
         }
 
         handleColoringDelete(parent, 1);
+        return;
         /*
             //due to our coloring rules the sibling always exists in this case. 
             if (GET_COLOR(sibling)==0) {

@@ -709,8 +709,9 @@ static void *build_tree(size_t *sizes, int n)
     void *root = make_node(sizes[0]);
     PUT_COLOR(root, BLACK);
     PUT_LEFT(root, 0); PUT_RIGHT(root, 0); PUT_PARENT(root, 0);
-    for (int i = 1; i < n; i++)
+    for (int i = 1; i < n; i++) {
         addNode(find_root(root), make_node(sizes[i]), sizes[i]);
+    }
     return find_root(root);
 }
  
@@ -791,10 +792,11 @@ static void test_delete_black_leaf(void)
      * Insert enough nodes so we get a black leaf.
      * With sizes {64,32,96,16,48} the node 16 ends up black.
      */
-    size_t sizes[] = {64, 32, 96, 16, 48};
-    void *root = build_tree(sizes, 5);
+    size_t sizes[] = {64, 32, 96, 40, 56,72,80,88, 48};
+    void *root = build_tree(sizes, 9);
  
-    void *target = find_node(root, 16);
+    print_binary_tree(root);
+    void *target = find_node(root, 72);
     if (!target || GET_COLOR(target) != BLACK) {
         /* If the tree shaped differently just skip with a note */
         printf("SKIP (node 16 not black in this tree shape)\n");
@@ -804,7 +806,7 @@ static void test_delete_black_leaf(void)
     int before = count_nodes(root);
     removeNode(target);
     root = find_root(find_node(root, 64) ? root : root);
- 
+    print_binary_tree(root);
     if (is_valid_rbt(root) && count_nodes(root) == before - 1)
         PASS();
     else
