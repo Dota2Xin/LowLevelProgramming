@@ -589,7 +589,7 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
 //handle the casework accordingly. 
 //handles the actual deletion but not 
 void deleteRecolor(void* removeNode) {
-
+    //DEAL WITH THIS
     if(GET_PARENT(removeNode)==0) {
         return;
     }
