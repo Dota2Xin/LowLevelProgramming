@@ -93,8 +93,8 @@ void *addNode(void *root, void *newNode, size_t size);
 void  baseRemove(void *node);
 void  deleteRecolor(void *node);
 void  removeNode(void *node);
-void *getPostorder(void *root);
-void *getPreorder(void *root);
+void *getLargest(void *root);
+void *getSmallest(void *root);
 void *searchSize(void *root, size_t size);
 void *recurse(void *root, void *lastLarger, size_t size);
 void print_binary_tree(void *root);
@@ -441,10 +441,10 @@ static void test_search_too_large(void)
         FAIL("expected 0 but got a node");
 }
  
-/* 10. getPreorder returns leftmost node                                */
-static void test_getpreorder(void)
+/* 10. getSmallest returns leftmost node                                */
+static void test_getSmallest(void)
 {
-    TEST("getPreorder – returns leftmost (minimum) node");
+    TEST("getSmallest – returns leftmost (minimum) node");
     arena_reset();
  
     size_t sizes[] = {64, 128, 32, 256};
@@ -456,17 +456,17 @@ static void test_getpreorder(void)
         addNode(find_root(root), make_node(sizes[i]), sizes[i]);
     root = find_root(root);
  
-    void *min = getPreorder(root);
+    void *min = getSmallest(root);
     if (GET_SIZE(min) == 32)
         PASS();
     else
-        FAIL("getPreorder did not return minimum");
+        FAIL("getSmallest did not return minimum");
 }
  
-/* 11. getPostorder returns rightmost node                              */
-static void test_getpostorder(void)
+/* 11. getLargest returns rightmost node                              */
+static void test_getLargest(void)
 {
-    TEST("getPostorder – returns rightmost (maximum) node");
+    TEST("getLargest – returns rightmost (maximum) node");
     arena_reset();
  
     size_t sizes[] = {64, 128, 32, 256};
@@ -478,11 +478,11 @@ static void test_getpostorder(void)
         addNode(find_root(root), make_node(sizes[i]), sizes[i]);
     root = find_root(root);
  
-    void *max = getPostorder(root);
+    void *max = getLargest(root);
     if (GET_SIZE(max) == 256)
         PASS();
     else
-        FAIL("getPostorder did not return maximum");
+        FAIL("getLargest did not return maximum");
 }
  
 /* 12. Left rotation preserves BST and RBT properties                  */
@@ -795,18 +795,18 @@ static void test_delete_black_leaf(void)
     size_t sizes[] = {64, 32, 96, 40, 56,72,80,88, 48};
     void *root = build_tree(sizes, 9);
  
-    print_binary_tree(root);
+    //print_binary_tree(root);
     void *target = find_node(root, 72);
     if (!target || GET_COLOR(target) != BLACK) {
         /* If the tree shaped differently just skip with a note */
-        printf("SKIP (node 16 not black in this tree shape)\n");
+        //printf("SKIP (node 16 not black in this tree shape)\n");
         tests_run--; /* don't count as fail */
         return;
     }
     int before = count_nodes(root);
     removeNode(target);
     root = find_root(find_node(root, 64) ? root : root);
-    print_binary_tree(root);
+    //print_binary_tree(root);
     if (is_valid_rbt(root) && count_nodes(root) == before - 1)
         PASS();
     else
@@ -847,7 +847,6 @@ static void test_delete_one_child(void)
     size_t sizes[] = {64, 32, 96, 80};
     void *root = build_tree(sizes, 4);
     int before = count_nodes(root);
- 
     void *target = find_node(root, 96);
     if (!target) { FAIL("could not find node 96"); return; }
  
@@ -865,7 +864,6 @@ static void test_delete_one_child(void)
     void *survivor = find_node(root, 64);
     if (!survivor) survivor = find_node(root, 32);
     void *new_root = find_root(survivor);
- 
     if (is_valid_rbt(new_root) && count_nodes(new_root) == before - 1)
         PASS();
     else
@@ -878,12 +876,12 @@ static void test_delete_two_children(void)
     TEST("Delete node with two children – RBT valid, correct count");
     arena_reset();
  
-    size_t sizes[] = {64, 32, 96, 16, 48, 80, 128};
+    size_t sizes[] = {64, 32, 96, 40, 48, 80, 128};
     void *root = build_tree(sizes, 7);
     int before = count_nodes(root);
- 
+    print_binary_tree(root);
     /* Node 32 has both 16 and 48 as children */
-    void *target = find_node(root, 32);
+    void *target = find_node(root, 96);
     if (!target || GET_LEFT_CHILD(target) == 0 || GET_RIGHT_CHILD(target) == 0) {
         printf("SKIP (node 32 doesn't have two children in this shape)\n");
         tests_run--;
@@ -891,6 +889,7 @@ static void test_delete_two_children(void)
     }
  
     removeNode(target);
+    print_binary_tree(root);
     void *new_root = find_root(find_node(root, 64));
  
     if (is_valid_rbt(new_root) && count_nodes(new_root) == before - 1)
@@ -905,15 +904,14 @@ static void test_delete_all_one_by_one(void)
     TEST("Delete all nodes one by one – RBT valid at every step");
     arena_reset();
  
-    size_t sizes[] = {64, 32, 96, 16, 48, 80, 128, 8, 24};
+    size_t sizes[] = {64, 32, 96, 40, 48, 80, 128, 88, 72};
     int N = 9;
     void *root = build_tree(sizes, N);
- 
     int ok = 1;
     for (int remaining = N; remaining > 1; remaining--) {
         /* Always delete the current minimum (leftmost) – it exercises
          * red leaf, black leaf, and one-child cases across iterations */
-        void *min = getPreorder(root);
+        void *min = getSmallest(root);
         removeNode(min);
  
         /* Find a surviving node to re-anchor the root */
@@ -923,7 +921,6 @@ static void test_delete_all_one_by_one(void)
  
         if (!anchor) break;   /* last node was just deleted */
         root = find_root(anchor);
- 
         if (!is_valid_rbt(root)) {
             printf("\n  FAIL: invalid after deleting min with %d nodes remaining",
                    remaining - 1);
@@ -1025,8 +1022,8 @@ int main(void)
     test_search_exact();
     test_search_best_fit();
     test_search_too_large();
-    test_getpreorder();
-    test_getpostorder();
+    test_getSmallest();
+    test_getLargest();
     test_left_rotate();
     test_right_rotate();
     test_duplicate_sizes();
