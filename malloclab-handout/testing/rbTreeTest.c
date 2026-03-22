@@ -699,7 +699,7 @@ static void test_stress_insert_search(void)
 /* ------------------------------------------------------------------ */
 /* Delete helpers                                                       */
 /* ------------------------------------------------------------------ */
- 
+extern char *rootMain;
 /*
  * Build a standard tree from an array of sizes, returning the root.
  * sizes[0] is used as the first (black) root.
@@ -709,10 +709,10 @@ static void *build_tree(size_t *sizes, int n)
     void *root = make_node(sizes[0]);
     PUT_COLOR(root, BLACK);
     PUT_LEFT(root, 0); PUT_RIGHT(root, 0); PUT_PARENT(root, 0);
-    for (int i = 1; i < n; i++) {
-        addNode(find_root(root), make_node(sizes[i]), sizes[i]);
-    }
-    return find_root(root);
+    rootMain = root;   /* seed before any addNode calls */
+    for (int i = 1; i < n; i++)
+        addNode(rootMain, make_node(sizes[i]), sizes[i]);
+    return rootMain;
 }
  
 /* Walk the tree and return the node whose block size == target, or NULL */
@@ -821,12 +821,10 @@ static void test_delete_root(void)
  
     size_t sizes[] = {64, 32, 96};
     void *root = build_tree(sizes, 3);
- 
     /* Keep a reference to a non-root node so we can find the new root */
     void *non_root = find_node(root, 32);
     removeNode(root);
     void *new_root = find_root(non_root);
- 
     if (new_root != 0 && GET_COLOR(new_root) == BLACK && is_valid_rbt(new_root))
         PASS();
     else
@@ -879,7 +877,6 @@ static void test_delete_two_children(void)
     size_t sizes[] = {64, 32, 96, 40, 48, 80, 128};
     void *root = build_tree(sizes, 7);
     int before = count_nodes(root);
-    print_binary_tree(root);
     /* Node 32 has both 16 and 48 as children */
     void *target = find_node(root, 96);
     if (!target || GET_LEFT_CHILD(target) == 0 || GET_RIGHT_CHILD(target) == 0) {
@@ -889,7 +886,6 @@ static void test_delete_two_children(void)
     }
  
     removeNode(target);
-    print_binary_tree(root);
     void *new_root = find_root(find_node(root, 64));
  
     if (is_valid_rbt(new_root) && count_nodes(new_root) == before - 1)
@@ -904,24 +900,21 @@ static void test_delete_all_one_by_one(void)
     TEST("Delete all nodes one by one – RBT valid at every step");
     arena_reset();
  
-    size_t sizes[] = {64, 32, 96, 40, 48, 80, 128, 88, 72};
+    size_t sizes[] = {64, 32, 96, 88, 48, 80, 128,40, 56};
     int N = 9;
-    void *root = build_tree(sizes, N);
+    build_tree(sizes, N);
+    print_binary_tree(rootMain);
     int ok = 1;
     for (int remaining = N; remaining > 1; remaining--) {
-        /* Always delete the current minimum (leftmost) – it exercises
-         * red leaf, black leaf, and one-child cases across iterations */
-        void *min = getSmallest(root);
+        /* Always delete the current minimum (leftmost) */
+        void *min = getSmallest(rootMain);
+        printf("Removed Size: %i, Number Left: %i", GET_SIZE(min), remaining-1);
         removeNode(min);
+
+        print_binary_tree(rootMain);
+        /* rootMain updated automatically by deleteRecolor */
  
-        /* Find a surviving node to re-anchor the root */
-        void *anchor = 0;
-        for (int i = 0; i < N && anchor == 0; i++)
-            anchor = find_node(root, sizes[i]);   /* root may have moved */
- 
-        if (!anchor) break;   /* last node was just deleted */
-        root = find_root(anchor);
-        if (!is_valid_rbt(root)) {
+        if (!is_valid_rbt(rootMain)) {
             printf("\n  FAIL: invalid after deleting min with %d nodes remaining",
                    remaining - 1);
             ok = 0;
@@ -939,36 +932,27 @@ static void test_interleaved_insert_delete(void)
     arena_reset();
  
     size_t init[] = {128, 64, 192, 32, 96, 160, 256};
-    void *root = build_tree(init, 7);
+    build_tree(init, 7);
  
     int ok = 1;
  
-    /* Delete 64, insert 72, delete 192, insert 200, delete 32 */
-    size_t to_delete[] = {64, 192, 32};
-    size_t to_insert[] = {72, 200};
- 
-    void *d = find_node(root, 64);
+    void *d = find_node(rootMain, 64);
     if (d) removeNode(d);
-    root = find_root(find_node(root, 128));
-    if (!is_valid_rbt(root)) { ok = 0; goto done27; }
+    if (!is_valid_rbt(rootMain)) { ok = 0; goto done27; }
  
-    addNode(root, make_node(72), 72);
-    root = find_root(root);
-    if (!is_valid_rbt(root)) { ok = 0; goto done27; }
+    addNode(rootMain, make_node(72), 72);
+    if (!is_valid_rbt(rootMain)) { ok = 0; goto done27; }
  
-    d = find_node(root, 192);
+    d = find_node(rootMain, 192);
     if (d) removeNode(d);
-    root = find_root(find_node(root, 128));
-    if (!is_valid_rbt(root)) { ok = 0; goto done27; }
+    if (!is_valid_rbt(rootMain)) { ok = 0; goto done27; }
  
-    addNode(root, make_node(200), 200);
-    root = find_root(root);
-    if (!is_valid_rbt(root)) { ok = 0; goto done27; }
+    addNode(rootMain, make_node(200), 200);
+    if (!is_valid_rbt(rootMain)) { ok = 0; goto done27; }
  
-    d = find_node(root, 32);
+    d = find_node(rootMain, 32);
     if (d) removeNode(d);
-    root = find_root(find_node(root, 128));
-    if (!is_valid_rbt(root)) { ok = 0; goto done27; }
+    if (!is_valid_rbt(rootMain)) { ok = 0; goto done27; }
  
 done27:
     if (ok) PASS(); else FAIL("RBT invariant broken during interleaved ops");
@@ -981,26 +965,163 @@ static void test_delete_then_search(void)
     arena_reset();
  
     size_t sizes[] = {64, 32, 96, 128, 48};
-    void *root = build_tree(sizes, 5);
+    build_tree(sizes, 5);
  
-    /* Confirm 96 is present before delete */
-    void *before = searchSize(root, 96);
+    void *before = searchSize(rootMain, 96);
     if (!before || GET_SIZE(before) != 96) {
         FAIL("node 96 not found before delete");
         return;
     }
  
-    void *target = find_node(root, 96);
+    void *target = find_node(rootMain, 96);
     removeNode(target);
-    root = find_root(find_node(root, 64));
+    /* rootMain updated automatically */
  
-    /* After deletion, searching for exactly 96 should return 128
-     * (the next larger block), not 96 */
-    void *after = searchSize(root, 96);
-    int ok = is_valid_rbt(root) &&
+    /* Searching for 96 should now return 128 (next larger), not 96 */
+    void *after = searchSize(rootMain, 96);
+    int ok = is_valid_rbt(rootMain) &&
              (after == 0 || GET_SIZE(after) != 96);
  
     if (ok) PASS(); else FAIL("deleted node still returned by searchSize");
+}
+ 
+/* ------------------------------------------------------------------ */
+/* rootMain-specific tests                                              */
+/* ------------------------------------------------------------------ */
+ 
+/* 29. rootMain is set correctly by the very first insert (insertRecolor
+ *     sets rootMain when it detects parent==0).                       */
+static void test_rootmain_set_on_first_insert(void)
+{
+    TEST("rootMain – set correctly after first insert");
+    arena_reset();
+ 
+    void *n = make_node(64);
+    PUT_COLOR(n, BLACK);
+    PUT_LEFT(n, 0); PUT_RIGHT(n, 0); PUT_PARENT(n, 0);
+    rootMain = n;   /* seed as if this were the allocator's first free block */
+ 
+    /* Insert a second node via addNode; insertRecolor will keep rootMain */
+    addNode(rootMain, make_node(128), 128);
+ 
+    int ok = (rootMain != 0) &&
+             (GET_PARENT(rootMain) == 0) &&   /* real root has no parent */
+             (GET_COLOR(rootMain) == BLACK);
+ 
+    if (ok) PASS(); else FAIL("rootMain wrong after first addNode");
+}
+ 
+/* 30. rootMain stays valid through a rotation that lifts a new root   */
+static void test_rootmain_after_rotation(void)
+{
+    TEST("rootMain – updated correctly when rotation changes root");
+    arena_reset();
+ 
+    /* Ascending insert 32→64→96 forces a left rotation that lifts 64
+     * to the root; rootMain must reflect that.                        */
+    void *n = make_node(32);
+    PUT_COLOR(n, BLACK);
+    PUT_LEFT(n, 0); PUT_RIGHT(n, 0); PUT_PARENT(n, 0);
+    rootMain = n;
+ 
+    addNode(rootMain, make_node(64), 64);
+    addNode(rootMain, make_node(96), 96);
+ 
+    int ok = (rootMain != 0) &&
+             (GET_PARENT(rootMain) == 0) &&
+             (GET_COLOR(rootMain) == BLACK) &&
+             is_valid_rbt(rootMain);
+ 
+    if (ok) PASS(); else FAIL("rootMain not updated after rotation");
+}
+ 
+/* 31. rootMain updated when the root itself is deleted                 */
+static void test_rootmain_after_root_delete(void)
+{
+    TEST("rootMain – updated after deleting the root node");
+    arena_reset();
+ 
+    size_t sizes[] = {64, 32, 96, 40, 48};
+    build_tree(sizes, 5);
+ 
+    void *old_root = rootMain;
+    removeNode(old_root);
+ 
+    int ok = (rootMain != 0) &&
+             (rootMain != old_root) &&
+             (GET_PARENT(rootMain) == 0) &&
+             (GET_COLOR(rootMain) == BLACK) &&
+             is_valid_rbt(rootMain);
+ 
+    if (ok) PASS(); else FAIL("rootMain wrong after root delete");
+}
+ 
+/* 32. rootMain is consistent across 10 successive root deletions       */
+static void test_rootmain_successive_root_deletes(void)
+{
+    TEST("rootMain – consistent across 10 successive root deletes");
+    arena_reset();
+ 
+    /* Build a 12-node tree */
+    size_t sizes[] = {128,64,192,32,96,160,256,40,48,80,112,224};
+    int N = 12;
+    build_tree(sizes, N);
+ 
+    int ok = 1;
+    for (int i = 0; i < 10; i++) {
+        void *old_root = rootMain;
+        removeNode(old_root);
+ 
+        if (rootMain == 0) break;   /* tree emptied early, fine */
+ 
+        if (GET_PARENT(rootMain) != 0 ||
+            GET_COLOR(rootMain) != BLACK ||
+            !is_valid_rbt(rootMain)) {
+            printf("\n  FAIL: rootMain invalid on iteration %d", i + 1);
+            ok = 0;
+            break;
+        }
+    }
+ 
+    if (ok) PASS(); else FAIL("rootMain became inconsistent during root deletes");
+}
+ 
+/* 33. rootMain matches find_root() after a mixed sequence of ops       */
+static void test_rootmain_matches_find_root(void)
+{
+    TEST("rootMain – always matches find_root() during mixed ops");
+    arena_reset();
+ 
+    size_t sizes[] = {128, 64, 192, 32, 96};
+    build_tree(sizes, 5);
+ 
+    int ok = 1;
+ 
+    /* delete 64 */
+    void *d = find_node(rootMain, 64);
+    if (d) removeNode(d);
+    if (rootMain != find_root(find_node(rootMain, 128))) { ok = 0; goto done33; }
+ 
+    /* insert 72 */
+    addNode(rootMain, make_node(72), 72);
+    if (rootMain != find_root(find_node(rootMain, 128))) { ok = 0; goto done33; }
+ 
+    /* delete 192 */
+    d = find_node(rootMain, 192);
+    if (d) removeNode(d);
+    /* find a surviving anchor */
+    void *anchor = find_node(rootMain, 128);
+    if (!anchor) anchor = find_node(rootMain, 96);
+    if (anchor && rootMain != find_root(anchor)) { ok = 0; goto done33; }
+ 
+    /* insert 300 */
+    addNode(rootMain, make_node(300), 300);
+    anchor = find_node(rootMain, 128);
+    if (!anchor) anchor = find_node(rootMain, 96);
+    if (anchor && rootMain != find_root(anchor)) { ok = 0; goto done33; }
+ 
+done33:
+    if (ok) PASS(); else FAIL("rootMain diverged from find_root()");
 }
  
 /* ------------------------------------------------------------------ */
@@ -1043,6 +1164,13 @@ int main(void)
     test_delete_all_one_by_one();
     test_interleaved_insert_delete();
     test_delete_then_search();
+
+    printf("\n--- rootMain ---\n");
+    test_rootmain_set_on_first_insert();
+    test_rootmain_after_rotation();
+    test_rootmain_after_root_delete();
+    test_rootmain_successive_root_deletes();
+    test_rootmain_matches_find_root();
 
  
     printf("\n========================================\n");
