@@ -88,6 +88,10 @@ team_t team = {
 #define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
 
 
+/* rounds up to the nearest multiple of ALIGNMENT */
+#define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
+
+
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
 
 //Points to first free block in the heap. 
@@ -96,6 +100,12 @@ static char* firstFree;
 static char* segregatedList;
 static char* rootPointer;
 static size_t extendSize=CHUNKSIZE;
+
+void*  getLargest(void* root);
+void*  getSmallest(void* root);
+void*  recurse(void* root, void* lastLarger, size_t size);
+
+char* rootMain;
 /* 
  * mm_init - initialize the malloc package.
  */
@@ -267,9 +277,16 @@ Possible Optimizations (dig into this bag if tree appears to be slowing program 
 2. ...
 */
 //we also have to store parents I think. 
+//we also have to store parents I think. 
 void leftRotate(void* root) {
     char* temp=GET_RIGHT_CHILD(root);
-    char* temp2=GET_LEFT_CHILD(temp);
+    char* temp2;
+    if(GET_LEFT_CHILD(temp)!= 0) {
+        temp2=GET_LEFT_CHILD(temp);
+        PUT_PARENT(temp2, root);
+    } else {
+        temp2=0;
+    }
     char* parent=GET_PARENT(root);
     PUT_RIGHT(root, temp2);
     PUT_LEFT(temp, root);
@@ -277,6 +294,7 @@ void leftRotate(void* root) {
     
     if (parent== 0) {
         PUT_PARENT(temp, 0);
+        rootMain=temp;
         return;
     }
 
@@ -288,15 +306,23 @@ void leftRotate(void* root) {
     }
 }
 
+//temp should never be null
 void rightRotate(void* root) {
     char* temp=GET_LEFT_CHILD(root);
-    char* temp2=GET_RIGHT_CHILD(temp);
+    char* temp2;
+    if(GET_RIGHT_CHILD(temp)!= 0) {
+        temp2=GET_RIGHT_CHILD(temp);
+        PUT_PARENT(temp2, root);
+    } else {
+        temp2=0;
+    }
     char* parent=GET_PARENT(root);
     PUT_LEFT(root, temp2);
     PUT_RIGHT(temp, root);
     PUT_PARENT(root, temp);
     
     if (parent== 0) {
+        rootMain=temp;
         PUT_PARENT(temp, 0);
         return;
     }
@@ -310,53 +336,135 @@ void rightRotate(void* root) {
 }
 
 //only assumption is node1 is above node2
+//update parents
 void swap(void* node1, void* node2) {
-    char* temp1=GET_LEFT_CHILD(node1);
-    char* temp2=GET_RIGHT_CHILD(node1);
+    char* left1=GET_LEFT_CHILD(node1);
+    char* right1=GET_RIGHT_CHILD(node1);
     char* parent1=GET_PARENT(node1);
     char* parent2=GET_PARENT(node2);
-    PUT_LEFT(node1, GET_LEFT_CHILD(node2));
-    PUT_RIGHT(node1, GET_RIGHT_CHILD(node2));
-    PUT_LEFT(node2, temp1);
-    PUT_RIGHT(node2, temp2);
+    char* left2=GET_LEFT_CHILD(node2);
+    char* right2=GET_RIGHT_CHILD(node2);
+    PUT_LEFT(node1, left2);
+    PUT_RIGHT(node1, right2);
+    PUT_LEFT(node2, left1);
+    PUT_RIGHT(node2, right1);
     PUT_PARENT(node1, parent2);
     PUT_PARENT(node2, parent1);
+
+    if(left2!=0) {
+        PUT_PARENT(left2, node1);
+    }
+    if(right2!=0) {
+        PUT_PARENT(right2, node1);
+    }
+    if(left1!=0) {
+        PUT_PARENT(left1, node2);
+    }
+    if(right1!=0) {
+        PUT_PARENT(right1, node2);
+    }
+    
     char tempColor=GET_COLOR(node1);
     PUT_COLOR(node1, GET_COLOR(node2));
     PUT_COLOR(node2, tempColor);
 
-    if(GET_SIZE(node2)<=parent2) {
+    if(GET_SIZE(node2)<=GET_SIZE(parent2)) {
             PUT_LEFT(parent2, node1);
         } else {
             PUT_RIGHT(parent2, node1);
         }
     if (parent1!=0) {
-        if(GET_SIZE(node1)<=parent1) {
+        if(GET_SIZE(node1)<=GET_SIZE(parent1)) {
             PUT_LEFT(parent1, node2);
         } else {
             PUT_RIGHT(parent1, node2);
         }
+    } else {
+        rootMain=node2;
+    }
+    return;
+}
+
+//for the special case swap breaks when you swap directly with your child 
+void swapChild(void* parent, void* child) {
+    if (GET_SIZE(child)<=GET_SIZE(parent)) {
+        char* right1=GET_RIGHT_CHILD(parent);
+        char* grandparent=GET_PARENT(parent);
+        char* right2=GET_RIGHT_CHILD(child);
+        char* left2=GET_LEFT_CHILD(child);
+        char pColor=GET_COLOR(parent);
+
+        PUT_LEFT(child, parent);
+        PUT_RIGHT(child, right1);
+        if(right1!=0) {
+            PUT_PARENT(right1, child);
+        }
+        PUT_LEFT(parent, left2);
+        if(left2!=0) {
+            PUT_PARENT(left2, parent);
+        }
+        PUT_RIGHT(parent, right2);
+        if(right2!=0) {
+            PUT_PARENT(right2, parent);
+        }
+        //
+        if(grandparent!=0 && GET_SIZE(parent)<=GET_SIZE(grandparent)) {
+            PUT_LEFT(grandparent, child);
+        } else if (grandparent!=0) {
+            PUT_RIGHT(grandparent, child);
+        } else {
+            rootMain=child;
+        }
+        PUT_PARENT(child, grandparent);
+        PUT_PARENT(parent, child);
+        PUT_COLOR(parent, GET_COLOR(child));
+        PUT_COLOR(child, pColor);
+
+    } else {
+        char* left1=GET_LEFT_CHILD(parent);
+        char* grandparent=GET_PARENT(parent);
+        char* right2=GET_RIGHT_CHILD(child);
+        char* left2=GET_LEFT_CHILD(child);
+        char pColor=GET_COLOR(parent);
+
+        PUT_RIGHT(child, parent);
+        PUT_LEFT(child, left1);
+        if(left1!=0) {
+            PUT_PARENT(left1, child);
+        }
+        PUT_LEFT(parent, left2);
+        if(left2!=0) {
+            PUT_PARENT(left2, child);
+        }
+        PUT_RIGHT(parent, right2);
+        if(right2!=0) {
+            PUT_PARENT(right2, child);
+        }
+        
+        if(grandparent!=0 && GET_SIZE(parent)<=GET_SIZE(grandparent)) {
+            PUT_LEFT(grandparent, child);
+        } else if (grandparent!=0) {
+            PUT_RIGHT(grandparent, child);
+        } else {
+            rootMain=child;
+        }
+        PUT_PARENT(child, grandparent);
+        PUT_PARENT(parent, child);
+        PUT_COLOR(parent, GET_COLOR(child));
+        PUT_COLOR(child, pColor);
     }
     return;
 }
 //SHOULD HAVE A COMMAND TO PUT RED/BLACK BIT IN POINTER HEADERS FOR USE HERE
 void* addNode(void* root, void* newNode, size_t size) {
+    PUT(newNode, PACK_COLOR(GET_SIZE(newNode),1, GET_ALLOC(newNode) ));
     baseAdd(root, newNode, size);
     insertRecolor(newNode);
     return NULL;
 }
 
 void baseAdd(void* root, void* newNode, size_t size) {
-    PUT(newNode, PACK_COLOR(GET_SIZE(newNode),1, GET_ALLOC(newNode) ));
-    if (GET_SIZE(root)==size) {
-        char* left=GET_LEFT_CHILD(root);
-        PUT_LEFT(root, newNode);
-        PUT_LEFT(newNode, left);
-        PUT_PARENT(left, newNode);
-        PUT_PARENT(newNode, root);
-    }
-
-    if (GET_SIZE(root)<newNode) {
+    if (GET_SIZE(root)<size) {
         if(GET_RIGHT_CHILD(root)!=0) {
             baseAdd(GET_RIGHT_CHILD(root), newNode, size);
         } else {
@@ -367,7 +475,7 @@ void baseAdd(void* root, void* newNode, size_t size) {
         }
     }
 
-    if(GET_SIZE(root)>newNode) {
+    if(GET_SIZE(root)>=size) {
         if(GET_LEFT_CHILD(root)!=0) {
             baseAdd(GET_LEFT_CHILD(root), newNode, size);
         } else {
@@ -388,19 +496,20 @@ Every node is either red or black.
 4. (Conclusion) If a node N has exactly one child, the child must be red. If the child were black, its leaves would sit at a 
    different black depth than N's null node (which is considered black by rule 2), violating requirement 4.
 */
-void* insertRecolor(void* newNode) {
+void insertRecolor(void* newNode) {
     char* parent=GET_PARENT(newNode);
 
+    //root==newNode
     if (parent==0) {
+        rootMain=newNode;
         PUT_COLOR(newNode, 0);
-        return newNode;
+        return;
     }
 
     char* grandparent=GET_PARENT(parent);
-    
     //your parent is the root, root is always black, so we return immediately.  
     if (grandparent==0) {
-        return newNode;
+        return;
     }
     //need to do the no uncle case as well. 
 
@@ -416,11 +525,11 @@ void* insertRecolor(void* newNode) {
 
     //parent is black then no work has to be done all the rules are obeyed
     if (GET_COLOR(parent)==0) {
-        return newNode;
+        return;
     }
 
     //recolor according to rules and repeat as we go up.
-    if (GET_COLOR(uncle)==1 && uncle!=0) {
+    if (uncle!=0 && GET_COLOR(uncle)==1) {
         PUT_COLOR(parent, 0);
         PUT_COLOR(uncle, 0);
         PUT_COLOR(grandparent, 1);
@@ -436,7 +545,7 @@ void* insertRecolor(void* newNode) {
         rightRotate(grandparent);
         PUT_COLOR(parent, 0);
         PUT_COLOR(grandparent, 1);
-        return newNode;
+        return;
     }
 
     //second case we are right child of parent who is left child of grandparent
@@ -446,7 +555,7 @@ void* insertRecolor(void* newNode) {
         rightRotate(grandparent);
         PUT_COLOR(newNode, 0);
         PUT_COLOR(grandparent, 1);
-        return newNode;
+        return;
     }
 
     //third case we are right child of parent who is right child of grandparent
@@ -454,7 +563,7 @@ void* insertRecolor(void* newNode) {
         leftRotate(grandparent);
         PUT_COLOR(parent, 0);
         PUT_COLOR(grandparent, 1);
-        return newNode;
+        return;
     } 
 
     //fourth case we are left child of parent who is right child of grandparent
@@ -463,7 +572,7 @@ void* insertRecolor(void* newNode) {
     leftRotate(grandparent);
     PUT_COLOR(newNode, 0);
     PUT_COLOR(grandparent, 1);
-    return newNode;
+    return;
 }
 
 
@@ -473,36 +582,48 @@ void removeNode(void* removeNode) {
     return;
 }
 
-void baseRemove(removeNode) {
+void baseRemove(void* removeNode) {
     //deal with leaf case first
-    if(LEFT_CHILD(removeNode)==0 && RIGHT_CHILD(removeNode)==0) {
+    if(GET_LEFT_CHILD(removeNode)==0 && GET_RIGHT_CHILD(removeNode)==0) {
         return;
     }
 
-    if(RIGHT_CHILD(removeNode)==0) {
+    if(GET_RIGHT_CHILD(removeNode)==0) {
         //deal with single child case
         if(GET_RIGHT_CHILD(GET_LEFT_CHILD(removeNode))==0 && GET_LEFT_CHILD(GET_LEFT_CHILD(removeNode))==0) {
             return;
         }
-        char* swapNode=getPostorder(LEFT_CHILD(removeNode));
+        char* swapNode=getLargest(GET_LEFT_CHILD(removeNode));
         //note that swap also swaps the color to preserve tree rules.
-        swap(removeNode, swapNode);
+        if(swapNode==GET_LEFT_CHILD(removeNode)) {
+            swapChild(removeNode, swapNode);
+        } else {
+            swap(removeNode, swapNode);
+        }
         baseRemove(removeNode);
         return;
     }
 
-    if(LEFT_CHILD(removeNode)==0) {
+    if(GET_LEFT_CHILD(removeNode)==0) {
         if(GET_RIGHT_CHILD(GET_RIGHT_CHILD(removeNode))==0 && GET_LEFT_CHILD(GET_RIGHT_CHILD(removeNode))==0) {
             return;
         }
-        char* swapNode=getPreorder(RIGHT_CHILD(removeNode));
-        swap(removeNode, swapNode);
+        char* swapNode=getSmallest(GET_RIGHT_CHILD(removeNode));
+        if(swapNode==GET_RIGHT_CHILD(removeNode)) {
+            swapChild(removeNode, swapNode);
+        } else {
+            swap(removeNode, swapNode);
+        }
         baseRemove(removeNode);
         return;
     }
 
-    char* swapNode=getPreorder(RIGHT_CHILD(removeNode));
-    swap(removeNode, swapNode);
+    char* swapNode=getSmallest(GET_RIGHT_CHILD(removeNode));
+    if(swapNode==GET_RIGHT_CHILD(removeNode)) {
+        swapChild(removeNode, swapNode);
+    } else {
+        swap(removeNode, swapNode);
+    }
     baseRemove(removeNode);
     return;
 }
@@ -517,7 +638,7 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
         if (parent==0) {
             return;
         }
-        if(GET_SIZE(colorNode)<=GET_SIZE(parent)) {
+        if(colorNode==GET_LEFT_CHILD(parent)) {
             sibling=GET_RIGHT_CHILD(parent);
         } else {
             sibling=GET_LEFT_CHILD(parent);
@@ -535,7 +656,11 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
     if (GET_LEFT_CHILD(sibling)==0 && GET_RIGHT_CHILD(sibling)==0) {
         //by the rules of the tree you can't not have kids and be red as well with a double black case. 
         PUT_COLOR(sibling, 1);
-        handleColoringDelete(parent, 0);
+        if(GET_COLOR(parent)==0) {
+            handleColoringDelete(parent, 0);
+        } else {
+            PUT_COLOR(parent, 0);
+        }
         return;
     }
 
@@ -548,25 +673,30 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
         }
         PUT_COLOR(parent, 1);
         PUT_COLOR(sibling, 0);
+        handleColoringDelete(parent, 1);
         return;
     }
 
     //check if there are two children
-    if (GET_LEFT_CHILD(sibling)==0 && GET_RIGHT_CHILD(sibling)==0) {
+    if (GET_LEFT_CHILD(sibling)!=0 && GET_RIGHT_CHILD(sibling)!=0) {
         char* left=GET_LEFT_CHILD(sibling);
         char* right=GET_RIGHT_CHILD(sibling);
-        //one red child case
+        //one red child case (MAYBE NEED TO DO A CoLOR BASED ON ~GET_COLOR(PARENT))
         if (GET_COLOR(left)==1) {
             if(GET_SIZE(sibling)<=GET_SIZE(parent)) {
                 rightRotate(parent);
+                PUT_COLOR(sibling, GET_COLOR(parent));
                 PUT_COLOR(left, 0);
+                PUT_COLOR(parent, 0);
                 return;
             } else {
                 rightRotate(sibling);
                 PUT_COLOR(sibling, 1);
                 PUT_COLOR(left, 0);
                 leftRotate(parent);
+                PUT_COLOR(left, GET_COLOR(parent));
                 PUT_COLOR(sibling, 0);
+                PUT_COLOR(parent, 0);
                 return; 
             }
         }
@@ -576,16 +706,24 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
                 PUT_COLOR(sibling, 1);
                 PUT_COLOR(right, 0);
                 rightRotate(parent);
+                PUT_COLOR(right, GET_COLOR(parent));
                 PUT_COLOR(sibling, 0);
+                PUT_COLOR(parent, 0);
                 return;
             } else {
                 leftRotate(parent);
+                PUT_COLOR(sibling, GET_COLOR(parent));
                 PUT_COLOR(right, 0);
+                PUT_COLOR(parent, 0);
                 return;
             }
         }
         PUT_COLOR(sibling, 1);
-        handleColoringDelete(parent, 0);
+        if(GET_COLOR(parent)==0) {
+            handleColoringDelete(parent, 0);
+        } else {
+            PUT_COLOR(parent, 0);
+        }
         return;
     }
     //now we know its one child handle left and right case
@@ -596,11 +734,16 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
             PUT_COLOR(sibling, 1);
             PUT_COLOR(right, 0);
             rightRotate(parent);
+            PUT_COLOR(right, GET_COLOR(parent));
             PUT_COLOR(sibling, 0);
+            PUT_COLOR(parent, 0);
+            //PUT_COLOR(sibling, 0);
             return;
         } else {
             leftRotate(parent);
+            PUT_COLOR(sibling, GET_COLOR(parent));
             PUT_COLOR(right, 0);
+            PUT_COLOR(parent, 0);
             return;
         }
     }
@@ -609,14 +752,18 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
         char* left=GET_LEFT_CHILD(sibling);
         if(GET_SIZE(sibling)<=GET_SIZE(parent)) {
             rightRotate(parent);
+            PUT_COLOR(sibling, GET_COLOR(parent));
             PUT_COLOR(left, 0);
+            PUT_COLOR(parent, 0);
             return;
         } else {
             rightRotate(sibling);
             PUT_COLOR(sibling, 1);
             PUT_COLOR(left, 0);
             leftRotate(parent);
+            PUT_COLOR(left, GET_COLOR(parent));
             PUT_COLOR(sibling, 0);
+            PUT_COLOR(parent, 0);
             return;
         }
     }
@@ -626,45 +773,43 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
 //handle the casework accordingly. 
 //handles the actual deletion but not 
 void deleteRecolor(void* removeNode) {
-
+    //DEAL WITH THIS
     if(GET_PARENT(removeNode)==0) {
+        char* left=GET_LEFT_CHILD(removeNode);
+        char* right=GET_RIGHT_CHILD(removeNode);
+        if(left!=0) {
+            rootMain=left;
+            PUT_PARENT(left, 0);
+            PUT_COLOR(left, 0);
+            return;
+        } else if (right!=0) {
+            rootMain=right;
+            PUT_PARENT(right, 0);
+            PUT_COLOR(right, 0);
+            return;
+        }
         return;
     }
     char* parent=GET_PARENT(removeNode);
-
     
     //now we get to the general case 
     //no children first
     if (GET_LEFT_CHILD(removeNode)==0 && GET_RIGHT_CHILD(removeNode)==0) {
         char* sibling;
-        if(GET_SIZE(removeNode)<=GET_SIZE(parent)) {
-                PUT_LEFT(parent, 0);
-                sibling=GET_RIGHT_CHILD(parent);
-            } else {
-                PUT_RIGHT(parent, 0);
-                sibling=GET_LEFT_CHILD(parent);
-            }
+        if(removeNode==GET_LEFT_CHILD(parent)) {
+            PUT_LEFT(parent, 0);
+            sibling=GET_RIGHT_CHILD(parent);
+        } else {
+            PUT_RIGHT(parent, 0);
+            sibling=GET_LEFT_CHILD(parent);
+        }
         //if we're red this is easy
         if (GET_COLOR(removeNode)==1) {
             return;
         }
 
         handleColoringDelete(parent, 1);
-        /*
-            //due to our coloring rules the sibling always exists in this case. 
-            if (GET_COLOR(sibling)==0) {
-                char* sLeft=GET_LEFT_CHILD(sibling);
-                char* sRight=GET_RIGHT_CHILD(sibling);
-                if((sLeft==0 || GET_COLOR(sLeft)==0) && (sRight==0 || GET_COLOR(sRight)==0)) {
-                    //double black case
-                }
-                return;
-            }
-
-        if (GET_COLOR(sibling)==1) {
-            return;
-        }
-            */
+        return;
     }
 
     //right child only
@@ -672,49 +817,73 @@ void deleteRecolor(void* removeNode) {
         char* right=GET_RIGHT_CHILD(removeNode);
         //deal with if one of the two is red
         if(GET_COLOR(removeNode)==1 || GET_COLOR(right)==1) {
-            if(GET_SIZE(removeNode)<=GET_SIZE(parent)) {
+            if(removeNode==GET_LEFT_CHILD(parent)) {
                 PUT_LEFT(parent, right);
+                PUT_PARENT(right, parent);
                 PUT_COLOR(right, 0);
             } else {
                 PUT_RIGHT(parent, right);
+                PUT_PARENT(right, parent);
                 PUT_COLOR(right, 0);
             }
             return;
+        } else {
+            if(removeNode==GET_LEFT_CHILD(parent)) {
+                PUT_LEFT(parent, right);
+                PUT_PARENT(right, parent);
+                PUT_COLOR(right, 0);
+            } else {
+                PUT_RIGHT(parent, right);
+                PUT_PARENT(right, parent);
+                PUT_COLOR(right, 0);
+            }
+            handleColoringDelete(right, 0);
         }
-        handleColoringDelete(right, 0);
 
     }
 
     //left child only
     char* left=GET_LEFT_CHILD(removeNode);
     if(GET_COLOR(removeNode)==1 || GET_COLOR(left)==1) {
-            if(GET_SIZE(removeNode)<=GET_SIZE(parent)) {
-                PUT_LEFT(parent, left);
-                PUT_COLOR(left, 0);
-            } else {
-                PUT_RIGHT(parent, left);
-                PUT_COLOR(left, 0);
-            }
-            return;
+        if(removeNode==GET_LEFT_CHILD(parent)) {
+            PUT_LEFT(parent, left);
+            PUT_PARENT(left, parent);
+            PUT_COLOR(left, 0);
+        } else {
+            PUT_RIGHT(parent, left);
+            PUT_PARENT(left, parent);
+            PUT_COLOR(left, 0);
         }
-    handleColoringDelete(left,0);
+        return;
+    } else {
+        if(removeNode==GET_LEFT_CHILD(parent)) {
+            PUT_LEFT(parent, left);
+            PUT_PARENT(left, parent);
+            PUT_COLOR(left, 0);
+        } else {
+            PUT_RIGHT(parent, left);
+            PUT_PARENT(left, parent);
+            PUT_COLOR(left, 0);
+        }
+        handleColoringDelete(left,0);
+    }
     //no double child case because bst standard delete always has you do more swaps if two children.
     return;
 }
 
-void* getPostorder(void* root) {
+void* getLargest(void* root) {
     if(GET_RIGHT_CHILD(root)==0) {
         return root;
     } else {
-        return getPostorder(GET_RIGHT_CHILD(root));
+        return getLargest(GET_RIGHT_CHILD(root));
     }
 }
 
-void* getPreorder(void* root) {
+void* getSmallest(void* root) {
     if(GET_LEFT_CHILD(root)==0) {
         return root;
     } else {
-        return getPreorder(GET_LEFT_CHILD(root));
+        return getSmallest(GET_LEFT_CHILD(root));
     }
 }
 
@@ -733,18 +902,17 @@ void* recurse(void* root, void* lastLarger, size_t size) {
     }
 
     if (size<GET_SIZE(root)) {
-        if(LEFT_CHILD(root)!=0) {
-            return recurse((char*) LEFT_CHILD(root), root, size);
+        if(GET_LEFT_CHILD(root)!=0) {
+            return recurse((char*) GET_LEFT_CHILD(root), root, size);
         }
         else {
             return root;
         }
-        //need to define macros for tree traversal (left child right child, etc...)
     }
 
     if (size>GET_SIZE(root)) {
-        if(RIGHT_CHILD(root)!= 0) {
-            return recurse((char *) RIGHT_CHILD(root), lastLarger, size);
+        if(GET_RIGHT_CHILD(root)!= 0) {
+            return recurse((char *) GET_RIGHT_CHILD(root), lastLarger, size);
         }
         else {
             //return 0 if heap needs to be extended  
