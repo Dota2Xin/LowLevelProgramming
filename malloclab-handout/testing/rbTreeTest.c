@@ -903,15 +903,12 @@ static void test_delete_all_one_by_one(void)
     size_t sizes[] = {64, 32, 96, 88, 48, 80, 128,40, 56};
     int N = 9;
     build_tree(sizes, N);
-    print_binary_tree(rootMain);
     int ok = 1;
     for (int remaining = N; remaining > 1; remaining--) {
         /* Always delete the current minimum (leftmost) */
         void *min = getSmallest(rootMain);
-        printf("Removed Size: %i, Number Left: %i", GET_SIZE(min), remaining-1);
         removeNode(min);
 
-        print_binary_tree(rootMain);
         /* rootMain updated automatically by deleteRecolor */
  
         if (!is_valid_rbt(rootMain)) {
