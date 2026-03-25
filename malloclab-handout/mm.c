@@ -113,6 +113,13 @@ void*  getSmallest(void* root);
 void*  recurse(void* root, void* lastLarger, size_t size);
 
 char* rootMain;
+/*
+DESIGN IDEAS:
+1. Might need a tree bit stored somewhere to check if we even have a tree when using our functions
+2. If we are too fragmented then getting rid of footers on allocated blocks is almost certainly the first thing to fix,
+   we have space in the 4 bit (last bit we have space actually lol) of the next block irregardless if that block is free
+   or allocated as allocation is the 1 bit and color is the 2 bit (only for free). 
+*/
 /* 
  * mm_init - initialize the malloc package.
  */
@@ -178,12 +185,13 @@ void* addBlockArray(size_t size) {
 
     char* listPointer=GET(segregatedList+index);
 
-    while (listPointer==0 && index<SEGBASE) {
+    //THIS LOOP IS OFF BY ONE MAYBE LOLZ
+    while (listPointer==0 && index+1<SEGBASE) {
         index+=1;
         listPointer=GET(segregatedList+index);
     }
 
-    if (index==SEGBASE) {
+    if (index+1==SEGBASE) {
         //we don't have any location to place our stuff so we have to go to our tree and break it up
         listPointer=breakTree(size);
     }
@@ -238,6 +246,20 @@ void addFree(void* ptr, size_t size) {
 }
 
 void* breakTree(size_t size) {
+    char* nodePointer=searchSize(rootMain, size);
+    if (nodePointer==0) {
+        //need to extend the heap
+        //NEED TO FIX EXTEND HEAP TO RETURN PROPER POINTERS AND WHATNOTSKIS
+        nodePointer=extendHeap(size);
+        return nodePointer;
+    }
+
+    size_t totalSize=GET_SIZE(nodePointer);
+    if(totalSize-size<32) {
+        removeNode(nodePointer);
+        return nodePointer;
+    }
+    //add a free chunk based on nodepointer excess
     return NULL;
 }
 
