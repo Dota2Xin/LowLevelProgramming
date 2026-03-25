@@ -68,8 +68,15 @@ team_t team = {
 #define GET_SIZE(p) (GET(p) & ~0x7)
 #define GET_ALLOC(p) (GET(p) & 0x1)
 
+#define GET_NEXT(p) (GET((char*)(p)+DSIZE))
+#define GET_PREV(p) (GET((char*)(p)+2*DSIZE))
+
+#define PUT_NEXT(p, val) (PUT((char*)(p)+DSIZE, val))
+#define PUT_PREV(p, val) (PUT((char*)(p)+2*DSIZE, val))
+
 #define HDRP(bp) ((char *)(bp)-WSIZE)
 #define FTRP(bp) ((char *)(bp)+GET_SIZE(HDRP(bp))-WSIZE)
+#define HDFTRP(p) ((char* )(p)+GET_SIZE(p)-DSIZE);
 
 //Binary tree methods
 #define GET_LEFT_CHILD(p) (GET(((char*) p)+DSIZE))
@@ -112,13 +119,24 @@ char* rootMain;
 int mm_init(void)
 {
     //initialize the heap and the prologue+epilogue blocks
+    size_t heapSize=0;
     char* heapStart=mem_heap_lo();
     char* dump=mem_sbrk(CHUNKSIZE);
+    heapSize=CHUNKSIZE;
     segregatedList=heapStart;
     PUT(heapStart+SEGSIZE,PACK(DSIZE, 1));
-    PUT(heapStart+SEGSIZE+DSIZE, PACK(DSIZE, 1));
+    PUT(heapStart+SEGSIZE+DSIZE, PACK(DSIZE, 1));    
     char* heapEnd=mem_heap_hi();
     PUT(heapEnd-DSIZE, PACK(DSIZE, 1));
+    
+    heapSize-=SEGSIZE+3*DSIZE;
+    //initialize our root node for the red black tree
+    rootMain=SEGSIZE+2*DSIZE;
+    PUT(rootMain, PACK_COLOR(heapSize, 0, 1));
+    PUT_LEFT(rootMain, 0);
+    PUT_RIGHT(rootMain, 0);
+    PUT_PARENT(rootMain, 0);
+    PUT(rootMain+GET_SIZE(rootMain), PACK_COLOR(heapSize, 0, 1));
     return 0;
 }
 
@@ -132,7 +150,7 @@ void *mm_malloc(size_t size)
     if (size==0) {
         return NULL;
     }
-    else if (size<=MINSIZE) {
+    else if ((size+SIZE_T_SIZE)<=MINSIZE) {
         newSize=MINSIZE;
     }
     else {
@@ -167,7 +185,7 @@ void* addBlockArray(size_t size) {
 
     if (index==SEGBASE) {
         //we don't have any location to place our stuff so we have to go to our tree and break it up
-        return breakTree(size);
+        listPointer=breakTree(size);
     }
 
     //list pointer gives us the location in memory that our free block is at.
@@ -178,29 +196,48 @@ void* addBlockArray(size_t size) {
     //early return in here
     if(checkSize<size+32) {
         PUT(listPointer, PACK(checkSize, 1));
+        PUT(listPointer+GET_SIZE(listPointer)-DSIZE, PACK(checkSize, 1));
         //have to add correct allocation bits at foot somehow...
-        return listPointer;
+        return listPointer+DSIZE;
     }
 
     makeFree(listPointer+size, checkSize-size);
     PUT(listPointer, PACK(size, 1));
-    return listPointer;
+    PUT(listPointer+GET_SIZE(listPointer)-DSIZE, PACK(size, 1));
+    return listPointer+DSIZE;
 }
 
 //makes a free block of a given size at ptr and then passes it to be added to the global data structures
 void makeFree(void* ptr, size_t size) {
     PUT(ptr, PACK(size, 0));
-    PUT(((char*) ptr)+size, PACK(size, 0));
+    PUT(((char*) ptr)+size-DSIZE, PACK(size, 0));
     addFree(ptr, size);
 }
 
 //adds a given block to our data structures of tree/array based on its size
 void addFree(void* ptr, size_t size) {
-
+    //doubly linked array case
+    if (size<=512) {
+        int index=size/8-4;
+        if (GET(segregatedList+index)==0) {
+            //there's no free block so we add it
+            PUT(segregatedList+index, ptr);
+            PUT_NEXT(ptr, 0);
+            PUT_PREV(ptr, 0);
+        } else {
+            char* listBlock=GET(segregatedList+index);
+            PUT(segregatedList+index, ptr);
+            PUT_NEXT(ptr, listBlock);
+            PUT_PREV(listBlock, ptr);
+        }
+        return;
+    }
+    //red black tree case
+    addNode(rootMain, ptr, size);
+    return;
 }
 
 void* breakTree(size_t size) {
-    
     return NULL;
 }
 
