@@ -94,9 +94,7 @@ team_t team = {
 /* rounds up to the nearest multiple of ALIGNMENT */
 #define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
 
-
-/* rounds up to the nearest multiple of ALIGNMENT */
-#define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
+#define GET_INDEX(size) ((int) (size/8-4))
 
 
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
@@ -119,6 +117,10 @@ DESIGN IDEAS:
 2. If we are too fragmented then getting rid of footers on allocated blocks is almost certainly the first thing to fix,
    we have space in the 4 bit (last bit we have space actually lol) of the next block irregardless if that block is free
    or allocated as allocation is the 1 bit and color is the 2 bit (only for free). 
+3. May have to change do some other coalescing scheme if there is too much thrashing
+4. If the lists are segregated I'm starting to question if we need to make them doubly linked or we can just use a single list
+   and then we just add and remove from the start more like a stack or queue or whatever as that might work just as well...
+   food for thought.
 */
 /* 
  * mm_init - initialize the malloc package.
@@ -245,6 +247,10 @@ void addFree(void* ptr, size_t size) {
     return;
 }
 
+/*
+Finds the smallest node with value>size and then breaks it up into a chunk to be allocated (sometimes the whole node) if 
+values are close enough and into a chunk to be put back in as a free node, returns pointer to allocated node
+*/
 void* breakTree(size_t size) {
     char* nodePointer=searchSize(rootMain, size);
     if (nodePointer==0) {
@@ -255,25 +261,42 @@ void* breakTree(size_t size) {
     }
 
     size_t totalSize=GET_SIZE(nodePointer);
-    if(totalSize-size<32) {
+    size_t excess=totalSize-size;
+    if(excess<32) {
         removeNode(nodePointer);
+        PUT(nodePointer, PACK(size+excess, 1));
+        PUT(nodePointer+size+excess-DSIZE, PACK(size+excess, 1));
         return nodePointer;
     }
     //add a free chunk based on nodepointer excess
-    return NULL;
+    char* newPointer=nodePointer+size;
+    makeFree(newPointer, excess);
+    removeNode(nodePointer);
+    PUT(nodePointer, PACK(size, 1));
+    PUT(newPointer-DSIZE, PACK(size, 1));
+    return nodePointer;
 }
 
 void* addBlockTree(size_t size) {
-    return NULL;
+    return breakTree(size);
 }
 
 /*
- * mm_free - Freeing a block does nothing.
+ * mm_free - frees a block by first coalescing if need be and then adding to the free list afterwards.
  */
 void mm_free(void *ptr)
 {
+    char* newPointer=coalesce(ptr);
+    size_t freeSize=GET_SIZE(newPointer);
+    makeFree(newPointer, freeSize);
 }
 
+/*
+loops through all neighboring free nodes accumulating them to give one big node 
+*/
+void* coalesce(void* ptr) {
+
+}
 /*
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
  */
@@ -327,6 +350,42 @@ void* extendHeap(size_t requested) {
     return newBlock;
 }
 
+/////////SEGREGATED LIST METHODS///////////
+void removeElement(void* item, size_t size) {
+    char* next=GET_NEXT(item);
+    char* prev=GET_PREV(item);
+    int index=GET_INDEX(size);
+    if (next==0 && prev==0) {
+        PUT(segregatedList+index, 0);
+        return;
+    }
+
+    if(next==0) {
+        PUT_NEXT(prev, 0);
+        return;
+    }
+
+    if(prev==0) {
+        PUT_PREV(next, 0);
+        PUT(segregatedList+index, next);
+        return;
+    }
+
+    PUT_PREV(next, prev);
+    PUT_NEXT(prev, next);
+    return;
+}
+
+//inserts an element into our doubly blah blah blah linked list 
+void addElement(void* item, size_t size) {
+    int index=GET_INDEX(size);
+    char* old=GET(segregatedList+index);
+    PUT(segregatedList+index, item);
+    PUT_PREV(item,0);
+    PUT_NEXT(item, old);
+    PUT_PREV(old, item);
+    return;
+}
 
 /////////RED BLACK TREE METHODS////////////
 /*
