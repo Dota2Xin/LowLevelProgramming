@@ -158,7 +158,7 @@ int mm_init(void)
     
     heapSize-=SEGSIZE+3*DSIZE;
     //initialize our root node for the red black tree
-    rootMain=SEGSIZE+2*DSIZE;
+    rootMain=heapStart+SEGSIZE+2*DSIZE;
     PUT(rootMain, PACK_COLOR(heapSize, 0, 1));
     PUT_LEFT(rootMain, 0);
     PUT_RIGHT(rootMain, 0);
