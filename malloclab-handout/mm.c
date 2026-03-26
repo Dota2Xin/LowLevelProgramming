@@ -14,7 +14,6 @@
 #include <assert.h>
 #include <unistd.h>
 #include <string.h>
-#include <math.h>
 
 #include "mm.h"
 #include "memlib.h"
@@ -75,7 +74,7 @@ team_t team = {
 #define PUT_PREV(p, val) (PUT((char*)(p)+2*DSIZE, val))
 
 #define HDRP(bp) ((char *)(bp)-WSIZE)
-#define FTRP(bp) ((char *)(bp)+GET_SIZE(HDRP(bp))-WSIZE)
+#define FTRP(bp) ((char *)(bp)+GET_SIZE(HDRP(bp))-DSIZE)
 #define HDFTRP(p) ((char* )(p)+GET_SIZE(p)-DSIZE);
 
 //Binary tree methods
@@ -106,11 +105,30 @@ static char* segregatedList;
 static char* rootPointer;
 static size_t extendSize=CHUNKSIZE;
 
-void*  getLargest(void* root);
-void*  getSmallest(void* root);
-void*  recurse(void* root, void* lastLarger, size_t size);
+void* addNode(void* root, void* newNode, size_t size);
+void  baseAdd(void* root, void* newNode, size_t size);
+void  insertRecolor(void* newNode);
+void  removeNode(void* node);
+void  baseRemove(void* node);
+void  deleteRecolor(void* node);
+void  handleColoringDelete(void* colorNode, char nullCheck);
+void  leftRotate(void* root);
+void  rightRotate(void* root);
+void* searchSize(void* root, size_t size);
+void* recurse(void* root, void* lastLarger, size_t size);
+void* getLargest(void* root);
+void* getSmallest(void* root);
+void* breakTree(size_t size);
+void* addBlockArray(size_t size);
+void* addBlockTree(size_t size);
+void  makeFree(void* ptr, size_t size);
+void  addFree(void* ptr, size_t size);
+void* coalesce(void* ptr);
+void* extendHeap(size_t requested);
 
 char* rootMain;
+char* heapStart;
+char* heapEnd;
 /*
 DESIGN IDEAS:
 1. Might need a tree bit stored somewhere to check if we even have a tree when using our functions
@@ -129,7 +147,7 @@ int mm_init(void)
 {
     //initialize the heap and the prologue+epilogue blocks
     size_t heapSize=0;
-    char* heapStart=mem_heap_lo();
+    heapStart=mem_heap_lo();
     char* dump=mem_sbrk(CHUNKSIZE);
     heapSize=CHUNKSIZE;
     segregatedList=heapStart;
@@ -146,6 +164,7 @@ int mm_init(void)
     PUT_RIGHT(rootMain, 0);
     PUT_PARENT(rootMain, 0);
     PUT(rootMain+GET_SIZE(rootMain), PACK_COLOR(heapSize, 0, 1));
+    heapStart=rootMain;
     return 0;
 }
 
@@ -185,12 +204,12 @@ Once that's done you just put stuff in easily.
 void* addBlockArray(size_t size) {
     int index=size/8-4;
 
-    char* listPointer=GET(segregatedList+index);
+    char* listPointer=GET((char*)segregatedList+index);
 
     //THIS LOOP IS OFF BY ONE MAYBE LOLZ
     while (listPointer==0 && index+1<SEGBASE) {
         index+=1;
-        listPointer=GET(segregatedList+index);
+        listPointer=GET((char*)segregatedList+index);
     }
 
     if (index+1==SEGBASE) {
@@ -286,7 +305,7 @@ void* addBlockTree(size_t size) {
  */
 void mm_free(void *ptr)
 {
-    char* newPointer=coalesce(ptr);
+    char* newPointer=coalesce((char*)ptr-DSIZE);
     size_t freeSize=GET_SIZE(newPointer);
     makeFree(newPointer, freeSize);
 }
@@ -295,7 +314,33 @@ void mm_free(void *ptr)
 loops through all neighboring free nodes accumulating them to give one big node 
 */
 void* coalesce(void* ptr) {
-
+    char prevAlloc=GET_ALLOC(ptr-DSIZE);
+    char nextAlloc=GET_ALLOC(ptr+GET_SIZE(ptr));
+    if (prevAlloc==1 && nextAlloc==1) {
+        return ptr;
+    }
+    else if (prevAlloc==1 && nextAlloc==0) {
+        char* next=ptr+GET_SIZE(ptr);
+        size_t newSize=GET_SIZE(ptr)+GET_SIZE(next);
+        PUT(ptr, PACK(newSize, 0));
+        PUT(ptr+GET_SIZE(ptr)-DSIZE, PACK(newSize, 0));
+        return ptr;
+    }
+    else if (prevAlloc==0 && nextAlloc==1) {
+        char* prev=ptr-GET_SIZE(ptr-DSIZE);
+        size_t newSize=GET_SIZE(prev)+GET_SIZE(ptr);
+        PUT(prev, PACK(newSize, 0));
+        PUT(ptr+GET_SIZE(ptr)-DSIZE, PACK(newSize, 0));
+        return prev;
+    }
+    else {
+        char* next=ptr+GET_SIZE(ptr);
+        char* prev=ptr-GET_SIZE(ptr-DSIZE);
+        size_t newSize=GET_SIZE(ptr)+GET_SIZE(prev)+GET_SIZE(next);
+        PUT(prev, PACK(newSize, 0));
+        PUT(next+GET_SIZE(next)-DSIZE, PACK(newSize, 0));
+        return prev;
+    }
 }
 /*
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
@@ -333,9 +378,9 @@ void* extendHeap(size_t requested) {
         size_t newSize=GET_SIZE(prevBlock)+growSize-DSIZE;
         PUT(prevBlock, PACK(newSize, 0));
         PUT(prevBlock+newSize, PACK(newSize, 0));
-        PUT(boundary+growSize-DSIZE, PACK(DSIZE, 0));
+        PUT(boundary+growSize-DSIZE, PACK(DSIZE, 1));
 
-        extendSize=ALIGN((size_t) round(1.3*growSize));
+        extendSize = ALIGN(growSize + growSize / 3);
         
         return prevBlock;
     }
@@ -343,12 +388,14 @@ void* extendHeap(size_t requested) {
     char* newBlock=boundary-DSIZE;
     PUT(newBlock, PACK(growSize-DSIZE, 0));
     PUT(newBlock+growSize-DSIZE, PACK(growSize-DSIZE, 0));
-    PUT(newBlock+growSize, PACK(DSIZE, 0));
+    PUT(newBlock+growSize, PACK(DSIZE, 1));
 
-    extendSize=ALIGN((size_t) round(1.3*growSize));
+    extendSize = ALIGN(growSize + growSize / 3);
+    heapEnd=newBlock+growSize;
 
     return newBlock;
 }
+
 
 /////////SEGREGATED LIST METHODS///////////
 void removeElement(void* item, size_t size) {

@@ -1,10 +1,22 @@
+/*
+ * mm-naive.c - The fastest, least memory-efficient malloc package.
+ * 
+ * In this naive approach, a block is allocated by simply incrementing
+ * the brk pointer.  A block is pure payload. There are no headers or
+ * footers.  Blocks are never coalesced or reused. Realloc is
+ * implemented directly using mm_malloc and mm_free.
+ *
+ * NOTE TO STUDENTS: Replace this header comment with your own header
+ * comment that gives a high level description of your solution.
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <unistd.h>
 #include <string.h>
-#include <math.h>
 
+#include "mm.h"
+#include "memlib.h"
 
 //Run simple trace:  ./mdriver -V -f 
 /*
@@ -20,7 +32,24 @@ for larger byte sizes everything will be organized in a red black tree. We'll st
 in an explicit free list and go from there. 
 */
 
-/* single word (4) or double word (8) al    ignment */
+/*********************************************************
+ * NOTE TO STUDENTS: Before you do anything else, please
+ * provide your team information in the following struct.
+ ********************************************************/
+team_t team = {
+    /* Team name */
+    "ateam",
+    /* First member's full name */
+    "Harry Bovik",
+    /* First member's email address */
+    "bovik@cs.cmu.edu",
+    /* Second member's full name (leave blank if none) */
+    "",
+    /* Second member's email address (leave blank if none) */
+    ""
+};
+
+/* single word (4) or double word (8) alignment */
 #define ALIGNMENT 8
 #define MINSIZE 32 //Ensures free blocks have at least 4 chunks of space to work with 1 header 1 next pointer 1 prev pointer 1 footer. 
 #define WSIZE 8
@@ -38,8 +67,15 @@ in an explicit free list and go from there.
 #define GET_SIZE(p) (GET(p) & ~0x7)
 #define GET_ALLOC(p) (GET(p) & 0x1)
 
+#define GET_NEXT(p) (GET((char*)(p)+DSIZE))
+#define GET_PREV(p) (GET((char*)(p)+2*DSIZE))
+
+#define PUT_NEXT(p, val) (PUT((char*)(p)+DSIZE, val))
+#define PUT_PREV(p, val) (PUT((char*)(p)+2*DSIZE, val))
+
 #define HDRP(bp) ((char *)(bp)-WSIZE)
-#define FTRP(bp) ((char *)(bp)+GET_SIZE(HDRP(bp))-WSIZE)
+#define FTRP(bp) ((char *)(bp)+GET_SIZE(HDRP(bp))-DSIZE)
+#define HDFTRP(p) ((char* )(p)+GET_SIZE(p)-DSIZE);
 
 //Binary tree methods
 #define GET_LEFT_CHILD(p) (GET(((char*) p)+DSIZE))
@@ -57,78 +93,355 @@ in an explicit free list and go from there.
 /* rounds up to the nearest multiple of ALIGNMENT */
 #define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
 
+#define GET_INDEX(size) ((int) (size/8-4))
+
 
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
 
-void*  getLargest(void* root);
-void*  getSmallest(void* root);
-void*  recurse(void* root, void* lastLarger, size_t size);
+//Points to first free block in the heap. 
+
+static char* firstFree;
+static char* segregatedList;
+static char* rootPointer;
+static size_t extendSize=CHUNKSIZE;
+
+void* addNode(void* root, void* newNode, size_t size);
+void  baseAdd(void* root, void* newNode, size_t size);
+void  insertRecolor(void* newNode);
+void  removeNode(void* node);
+void  baseRemove(void* node);
+void  deleteRecolor(void* node);
+void  handleColoringDelete(void* colorNode, char nullCheck);
+void  leftRotate(void* root);
+void  rightRotate(void* root);
+void* searchSize(void* root, size_t size);
+void* recurse(void* root, void* lastLarger, size_t size);
+void* getLargest(void* root);
+void* getSmallest(void* root);
+void* breakTree(size_t size);
+void* addBlockArray(size_t size);
+void* addBlockTree(size_t size);
+void  makeFree(void* ptr, size_t size);
+void  addFree(void* ptr, size_t size);
+void* coalesce(void* ptr);
+void* extendHeap(size_t requested);
 
 char* rootMain;
+char* heapStart;
+char* heapEnd;
 /*
-int main() {
-    unsigned long size=1;
-
-    printf("Sisze of %u\n", sizeof(size));
+DESIGN IDEAS:
+1. Might need a tree bit stored somewhere to check if we even have a tree when using our functions
+2. If we are too fragmented then getting rid of footers on allocated blocks is almost certainly the first thing to fix,
+   we have space in the 4 bit (last bit we have space actually lol) of the next block irregardless if that block is free
+   or allocated as allocation is the 1 bit and color is the 2 bit (only for free). 
+3. May have to change do some other coalescing scheme if there is too much thrashing
+4. If the lists are segregated I'm starting to question if we need to make them doubly linked or we can just use a single list
+   and then we just add and remove from the start more like a stack or queue or whatever as that might work just as well...
+   food for thought.
+*/
+/* 
+ * mm_init - initialize the malloc package.
+ */
+int mm_init(void)
+{
+    //initialize the heap and the prologue+epilogue blocks
+    size_t heapSize=0;
+    heapStart=mem_heap_lo();
+    char* dump=mem_sbrk(CHUNKSIZE);
+    heapSize=CHUNKSIZE;
+    segregatedList=heapStart;
+    PUT(heapStart+SEGSIZE,PACK(DSIZE, 1));
+    PUT(heapStart+SEGSIZE+DSIZE, PACK(DSIZE, 1));    
+    char* heapEnd=mem_heap_hi();
+    PUT(heapEnd-DSIZE, PACK(DSIZE, 1));
+    
+    heapSize-=SEGSIZE+3*DSIZE;
+    //initialize our root node for the red black tree
+    rootMain=SEGSIZE+2*DSIZE;
+    PUT(rootMain, PACK_COLOR(heapSize, 0, 1));
+    PUT_LEFT(rootMain, 0);
+    PUT_RIGHT(rootMain, 0);
+    PUT_PARENT(rootMain, 0);
+    PUT(rootMain+GET_SIZE(rootMain), PACK_COLOR(heapSize, 0, 1));
+    heapStart=rootMain;
     return 0;
 }
-*/
+
+/* 
+ * mm_malloc - Allocate a block by incrementing the brk pointer.
+ *     Always allocate a block whose size is a multiple of the alignment.
+ */
+void *mm_malloc(size_t size)
+{
+    int newSize;
+    if (size==0) {
+        return NULL;
+    }
+    else if ((size+SIZE_T_SIZE)<=MINSIZE) {
+        newSize=MINSIZE;
+    }
+    else {
+        newSize = ALIGN(size + SIZE_T_SIZE);
+    }
+    
+    if (newSize <= SIZECROSS) {
+        return addBlockArray(newSize);
+    }
+
+    else {
+        return addBlockTree(newSize);
+    }
+}
 
 /*
-size_t a=PACK_COLOR(32, 1, 0);
-    size_t* p=&a;
-
-    size_t size=GET_SIZE(p);
-    char color=GET_COLOR(p);
-    char alloc=GET_ALLOC(p);
-
-    printf("size: %u\n", size);
-    printf("Color: %i\n", color);
-    printf("Alloc: %i\n", alloc);
-
-    a=PACK_COLOR(ALIGN(531), 1, 1);
-    p=&a;
-
-    size=GET_SIZE(p);
-    color=GET_COLOR(p);
-    alloc=GET_ALLOC(p);
-
-    printf("size: %u\n", size);
-    printf("color: %i\n", color);
-    printf("Alloc: %i\n", alloc);
-
-    a=PACK_COLOR(ALIGN(5), 0, 0);
-    p=&a;
-
-    size=GET_SIZE(p);
-    color=GET_COLOR(p);
-    alloc=GET_ALLOC(p);
-
-    printf("size: %u\n", size);
-    printf("color: %i\n", color);
-    printf("Alloc: %i\n", alloc);
-
-    a=PACK_COLOR(ALIGN(64), 0, 1);
-    p=&a;
-
-    size=GET_SIZE(p);
-    color=GET_COLOR(p);
-    alloc=GET_ALLOC(p);
-
-    printf("size: %u\n", size);
-    printf("color: %i\n", color);
-    printf("Alloc: %i\n", alloc);
-    return 0;
+We start by checking all of our blocks to see if they contain anything (listPointer!=0) and then if they don't
+we split up the blocks that we have already in the tree, if we have something but we're smaller then we split it up
+understanding that we can't have less than 32 bytes on their own.
+Once that's done you just put stuff in easily.
 */
+//Need to figure out how to do footer stuff with our data structures.
+void* addBlockArray(size_t size) {
+    int index=size/8-4;
+
+    char* listPointer=GET((char*)segregatedList+index);
+
+    //THIS LOOP IS OFF BY ONE MAYBE LOLZ
+    while (listPointer==0 && index+1<SEGBASE) {
+        index+=1;
+        listPointer=GET((char*)segregatedList+index);
+    }
+
+    if (index+1==SEGBASE) {
+        //we don't have any location to place our stuff so we have to go to our tree and break it up
+        listPointer=breakTree(size);
+    }
+
+    //list pointer gives us the location in memory that our free block is at.
+    //now we check the size of the free block, if it's less than size+32 we use the entire block up
+    //on the otherhand if we have more than that then we break up everything after size into its own free block.
+    size_t checkSize=GET_SIZE(listPointer);
+
+    //early return in here
+    if(checkSize<size+32) {
+        PUT(listPointer, PACK(checkSize, 1));
+        PUT(listPointer+GET_SIZE(listPointer)-DSIZE, PACK(checkSize, 1));
+        //have to add correct allocation bits at foot somehow...
+        return listPointer+DSIZE;
+    }
+
+    makeFree(listPointer+size, checkSize-size);
+    PUT(listPointer, PACK(size, 1));
+    PUT(listPointer+GET_SIZE(listPointer)-DSIZE, PACK(size, 1));
+    return listPointer+DSIZE;
+}
+
+//makes a free block of a given size at ptr and then passes it to be added to the global data structures
+void makeFree(void* ptr, size_t size) {
+    PUT(ptr, PACK(size, 0));
+    PUT(((char*) ptr)+size-DSIZE, PACK(size, 0));
+    addFree(ptr, size);
+}
+
+//adds a given block to our data structures of tree/array based on its size
+void addFree(void* ptr, size_t size) {
+    //doubly linked array case
+    if (size<=512) {
+        int index=size/8-4;
+        if (GET(segregatedList+index)==0) {
+            //there's no free block so we add it
+            PUT(segregatedList+index, ptr);
+            PUT_NEXT(ptr, 0);
+            PUT_PREV(ptr, 0);
+        } else {
+            char* listBlock=GET(segregatedList+index);
+            PUT(segregatedList+index, ptr);
+            PUT_NEXT(ptr, listBlock);
+            PUT_PREV(listBlock, ptr);
+        }
+        return;
+    }
+    //red black tree case
+    addNode(rootMain, ptr, size);
+    return;
+}
+
+/*
+Finds the smallest node with value>size and then breaks it up into a chunk to be allocated (sometimes the whole node) if 
+values are close enough and into a chunk to be put back in as a free node, returns pointer to allocated node
+*/
+void* breakTree(size_t size) {
+    char* nodePointer=searchSize(rootMain, size);
+    if (nodePointer==0) {
+        //need to extend the heap
+        //NEED TO FIX EXTEND HEAP TO RETURN PROPER POINTERS AND WHATNOTSKIS
+        nodePointer=extendHeap(size);
+        return nodePointer;
+    }
+
+    size_t totalSize=GET_SIZE(nodePointer);
+    size_t excess=totalSize-size;
+    if(excess<32) {
+        removeNode(nodePointer);
+        PUT(nodePointer, PACK(size+excess, 1));
+        PUT(nodePointer+size+excess-DSIZE, PACK(size+excess, 1));
+        return nodePointer;
+    }
+    //add a free chunk based on nodepointer excess
+    char* newPointer=nodePointer+size;
+    makeFree(newPointer, excess);
+    removeNode(nodePointer);
+    PUT(nodePointer, PACK(size, 1));
+    PUT(newPointer-DSIZE, PACK(size, 1));
+    return nodePointer;
+}
+
+void* addBlockTree(size_t size) {
+    return breakTree(size);
+}
+
+/*
+ * mm_free - frees a block by first coalescing if need be and then adding to the free list afterwards.
+ */
+void mm_free(void *ptr)
+{
+    char* newPointer=coalesce((char*)ptr-DSIZE);
+    size_t freeSize=GET_SIZE(newPointer);
+    makeFree(newPointer, freeSize);
+}
+
+/*
+loops through all neighboring free nodes accumulating them to give one big node 
+*/
+void* coalesce(void* ptr) {
+    char prevAlloc=GET_ALLOC(ptr-DSIZE);
+    char nextAlloc=GET_ALLOC(ptr+GET_SIZE(ptr));
+    if (prevAlloc==1 && nextAlloc==1) {
+        return ptr;
+    }
+    else if (prevAlloc==1 && nextAlloc==0) {
+        char* next=ptr+GET_SIZE(ptr);
+        size_t newSize=GET_SIZE(ptr)+GET_SIZE(next);
+        PUT(ptr, PACK(newSize, 0));
+        PUT(ptr+GET_SIZE(ptr)-DSIZE, PACK(newSize, 0));
+        return ptr;
+    }
+    else if (prevAlloc==0 && nextAlloc==1) {
+        char* prev=ptr-GET_SIZE(ptr-DSIZE);
+        size_t newSize=GET_SIZE(prev)+GET_SIZE(ptr);
+        PUT(prev, PACK(newSize, 0));
+        PUT(ptr+GET_SIZE(ptr)-DSIZE, PACK(newSize, 0));
+        return prev;
+    }
+    else {
+        char* next=ptr+GET_SIZE(ptr);
+        char* prev=ptr-GET_SIZE(ptr-DSIZE);
+        size_t newSize=GET_SIZE(ptr)+GET_SIZE(prev)+GET_SIZE(next);
+        PUT(prev, PACK(newSize, 0));
+        PUT(next+GET_SIZE(next)-DSIZE, PACK(newSize, 0));
+        return prev;
+    }
+}
+/*
+ * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
+ */
+void *mm_realloc(void *ptr, size_t size)
+{
+    void *oldptr = ptr;
+    void *newptr;
+    size_t copySize;
+    
+    newptr = mm_malloc(size);
+    if (newptr == NULL)
+      return NULL;
+    copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
+    if (size < copySize)
+      copySize = size;
+    memcpy(newptr, oldptr, copySize);
+    mm_free(oldptr);
+    return newptr;
+}
+
+
+
+//HEAP GROWTH WILL HAVE TO REIMPLEMENT TO ADD BLOCKS TO THE TREE ONCE THAT IS SETUP
+void* extendHeap(size_t requested) {
+    size_t growSize=MAX(extendSize, requested);
+    char* boundary=mem_sbrk(growSize);
+    PUT(boundary-DSIZE, PACK(DSIZE,0)); //remove old epilogue block
+    char checkPrev=GET_ALLOC(boundary-2*DSIZE);
+    if (checkPrev) {
+        //get the previous block which we now know is free from checkprev
+        char* prevBlock=boundary-3*DSIZE-GET_SIZE(boundary-2*DSIZE);
+
+        //make new free block+epilogue block
+        size_t newSize=GET_SIZE(prevBlock)+growSize-DSIZE;
+        PUT(prevBlock, PACK(newSize, 0));
+        PUT(prevBlock+newSize, PACK(newSize, 0));
+        PUT(boundary+growSize-DSIZE, PACK(DSIZE, 1));
+
+        extendSize = ALIGN(growSize + growSize / 3);
+        
+        return prevBlock;
+    }
+    //Previous block is allocated then we just make free block (using epilogue block from old heap up as well)
+    char* newBlock=boundary-DSIZE;
+    PUT(newBlock, PACK(growSize-DSIZE, 0));
+    PUT(newBlock+growSize-DSIZE, PACK(growSize-DSIZE, 0));
+    PUT(newBlock+growSize, PACK(DSIZE, 1));
+
+    extendSize = ALIGN(growSize + growSize / 3);
+    heapEnd=newBlock+growSize;
+
+    return newBlock;
+}
+
+
+/////////SEGREGATED LIST METHODS///////////
+void removeElement(void* item, size_t size) {
+    char* next=GET_NEXT(item);
+    char* prev=GET_PREV(item);
+    int index=GET_INDEX(size);
+    if (next==0 && prev==0) {
+        PUT(segregatedList+index, 0);
+        return;
+    }
+
+    if(next==0) {
+        PUT_NEXT(prev, 0);
+        return;
+    }
+
+    if(prev==0) {
+        PUT_PREV(next, 0);
+        PUT(segregatedList+index, next);
+        return;
+    }
+
+    PUT_PREV(next, prev);
+    PUT_NEXT(prev, next);
+    return;
+}
+
+//inserts an element into our doubly blah blah blah linked list 
+void addElement(void* item, size_t size) {
+    int index=GET_INDEX(size);
+    char* old=GET(segregatedList+index);
+    PUT(segregatedList+index, item);
+    PUT_PREV(item,0);
+    PUT_NEXT(item, old);
+    PUT_PREV(old, item);
+    return;
+}
 
 /////////RED BLACK TREE METHODS////////////
-//When we put into the main code add something that will keep track of the root in the tree.
 /*
 Possible Optimizations (dig into this bag if tree appears to be slowing program down):
 1. Store child state bits in the extra space of our nodes so that we don't have to do if statements or else statements to
    determine which child a node is and whatever other stuff about its uncle, we could store this in the bits after the parent.
 2. ...
 */
+//we also have to store parents I think. 
 //we also have to store parents I think. 
 void leftRotate(void* root) {
     char* temp=GET_RIGHT_CHILD(root);
