@@ -101,7 +101,7 @@ team_t team = {
 //Points to first free block in the heap. 
 
 static char* firstFree;
-static char* segregatedList;
+static size_t* segregatedList;
 static char* rootPointer;
 static size_t extendSize=CHUNKSIZE;
 
@@ -151,8 +151,8 @@ int mm_init(void)
     char* dump=mem_sbrk(CHUNKSIZE);
     heapSize=CHUNKSIZE;
     segregatedList=heapStart;
-    PUT(heapStart+SEGSIZE,PACK(DSIZE, 1));
-    PUT(heapStart+SEGSIZE+DSIZE, PACK(DSIZE, 1));    
+    PUT(heapStart+SEGSIZE,PACK(2*DSIZE, 1));
+    PUT(heapStart+SEGSIZE+DSIZE, PACK(2*DSIZE, 1));    
     char* heapEnd=mem_heap_hi();
     PUT(heapEnd-DSIZE, PACK(DSIZE, 1));
     
@@ -163,7 +163,7 @@ int mm_init(void)
     PUT_LEFT(rootMain, 0);
     PUT_RIGHT(rootMain, 0);
     PUT_PARENT(rootMain, 0);
-    PUT(rootMain+GET_SIZE(rootMain), PACK_COLOR(heapSize, 0, 1));
+    PUT(rootMain+GET_SIZE(rootMain)-DSIZE, PACK_COLOR(heapSize, 0, 1));
     heapStart=rootMain;
     return 0;
 }
@@ -178,11 +178,11 @@ void *mm_malloc(size_t size)
     if (size==0) {
         return NULL;
     }
-    else if ((size+SIZE_T_SIZE)<=MINSIZE) {
+    else if ((size+2*DSIZE)<=MINSIZE) {
         newSize=MINSIZE;
     }
     else {
-        newSize = ALIGN(size + SIZE_T_SIZE);
+        newSize = ALIGN(size + 2*DSIZE);
     }
     
     if (newSize <= SIZECROSS) {
@@ -204,12 +204,12 @@ Once that's done you just put stuff in easily.
 void* addBlockArray(size_t size) {
     int index=size/8-4;
 
-    char* listPointer=GET((char*)segregatedList+index);
+    char* listPointer=GET(segregatedList+index);
 
     //THIS LOOP IS OFF BY ONE MAYBE LOLZ
     while (listPointer==0 && index+1<SEGBASE) {
         index+=1;
-        listPointer=GET((char*)segregatedList+index);
+        listPointer=GET(segregatedList+index);
     }
 
     if (index+1==SEGBASE) {
@@ -336,6 +336,7 @@ void* coalesce(void* ptr) {
     else {
         char* next=ptr+GET_SIZE(ptr);
         char* prev=ptr-GET_SIZE(ptr-DSIZE);
+        //SOMETHING WRONG HERE
         size_t newSize=GET_SIZE(ptr)+GET_SIZE(prev)+GET_SIZE(next);
         PUT(prev, PACK(newSize, 0));
         PUT(next+GET_SIZE(next)-DSIZE, PACK(newSize, 0));
