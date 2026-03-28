@@ -527,6 +527,7 @@ static void test_stress_alloc_free_interleaved(void)
         if (!ok) break;
         /* Free every other one */
         for (int i = 0; i < NS; i += 2) {
+            printf("Break at free %i \n", i);
             mm_free(ptrs[i]);
             ptrs[i] = NULL;
         }
@@ -677,17 +678,17 @@ int main(void)
     //test_realloc_shrink();
     //test_realloc_heap_consistent();
  
-    //printf("\n--- Stress ---\n");
+    printf("\n--- Stress ---\n");
     //test_stress_random_sizes();
-    //test_stress_alloc_free_interleaved();
-    //test_stress_heap_growth();
-    //test_stress_no_fragmentation_after_frees();
+    test_stress_alloc_free_interleaved();
+    test_stress_heap_growth();
+    test_stress_no_fragmentation_after_frees();
  
-    //printf("\n--- Boundary & Edge ---\n");
-    //test_boundary_exactly_sizecross();
-    //test_boundary_one_over_sizecross();
-    //test_boundary_minsize();
-    //test_double_free_safety();
+    printf("\n--- Boundary & Edge ---\n");
+    test_boundary_exactly_sizecross();
+    test_boundary_one_over_sizecross();
+    test_boundary_minsize();
+    test_double_free_safety();
  
     printf("\n============================================================\n");
     printf("  Results: %d / %d passed\n", tests_passed, tests_run);

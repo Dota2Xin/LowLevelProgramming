@@ -274,7 +274,7 @@ void* breakTree(size_t size) {
     char* nodePointer=searchSize(rootMain, size);
     if (nodePointer==0) {
         //need to extend the heap
-        //NEED TO FIX EXTEND HEAP TO RETURN PROPER POINTERS AND WHATNOTSKIS
+        //I think this is wrong
         nodePointer=extendHeap(size);
         return nodePointer;
     }
@@ -297,7 +297,24 @@ void* breakTree(size_t size) {
 }
 
 void* addBlockTree(size_t size) {
-    return breakTree(size);
+    //list pointer gives us the location in memory that our free block is at.
+    //now we check the size of the free block, if it's less than size+32 we use the entire block up
+    //on the otherhand if we have more than that then we break up everything after size into its own free block.
+    char* listPointer=breakTree(size);
+    size_t checkSize=GET_SIZE(listPointer);
+
+    //early return in here
+    if(checkSize<size+32) {
+        PUT(listPointer, PACK(checkSize, 1));
+        PUT(listPointer+GET_SIZE(listPointer)-DSIZE, PACK(checkSize, 1));
+        //have to add correct allocation bits at foot somehow...
+        return listPointer+DSIZE;
+    }
+
+    makeFree(listPointer+size, checkSize-size);
+    PUT(listPointer, PACK(size, 1));
+    PUT(listPointer+GET_SIZE(listPointer)-DSIZE, PACK(size, 1));
+    return listPointer+DSIZE;
 }
 
 /*
@@ -305,6 +322,8 @@ void* addBlockTree(size_t size) {
  */
 void mm_free(void *ptr)
 {
+    //heap could mess up and not properly store children so that when we create/add a node somewhere it cou;d
+    //end up with spurious children?????
     char* newPointer=coalesce((char*)ptr-DSIZE);
     size_t freeSize=GET_SIZE(newPointer);
     makeFree(newPointer, freeSize);
@@ -324,30 +343,48 @@ void* coalesce(void* ptr) {
     else if (prevAlloc==1 && nextAlloc==0) {
         char* next=ptr+GET_SIZE(ptr);
         size_t nextSize=GET_SIZE(next);
-        if(nextSize>=512) {
+        if(nextSize>512) {
+            removeNode(next);
             //set rootMain to 0 if the tree is empty and that should work
         } else {
             removeElement(next, nextSize);
         }
         size_t newSize=GET_SIZE(ptr)+nextSize;
         PUT(ptr, PACK(newSize, 0));
-        PUT(ptr+GET_SIZE(ptr)-DSIZE, PACK(newSize, 0));
+        PUT(ptr+newSize-DSIZE, PACK(newSize, 0));
         return ptr;
     }
     else if (prevAlloc==0 && nextAlloc==1) {
         char* prev=ptr-GET_SIZE(ptr);
-        size_t newSize=GET_SIZE(prev)+GET_SIZE(ptr);
+        size_t prevSize=GET_SIZE(prev);
+        if (prevSize>512) {
+            removeNode(prev);
+        } else {
+            removeElement(prev, prevSize);
+        }
+        size_t newSize=prevSize+GET_SIZE(ptr);
         PUT(prev, PACK(newSize, 0));
-        PUT(ptr+GET_SIZE(ptr)-DSIZE, PACK(newSize, 0));
+        PUT(prev+newSize-DSIZE, PACK(newSize, 0));
         return prev;
     }
     else {
         char* next=ptr+GET_SIZE(ptr);
         char* prev=ptr-GET_SIZE(ptr);
-        //SOMETHING WRONG HERE
-        size_t newSize=GET_SIZE(ptr)+GET_SIZE(prev)+GET_SIZE(next);
+        size_t nextSize=GET_SIZE(next);
+        size_t prevSize=GET_SIZE(prev);
+        if (prevSize>512) {
+            removeNode(prev);
+        } else {
+            removeElement(prev, prevSize);
+        }
+        if(nextSize>512) {
+            removeNode(next);
+        } else {
+            removeElement(next, nextSize);
+        }
+        size_t newSize=GET_SIZE(ptr)+prevSize+nextSize;
         PUT(prev, PACK(newSize, 0));
-        PUT(prev+GET_SIZE(prev)-DSIZE, PACK(newSize, 0));
+        PUT(prev+newSize-DSIZE, PACK(newSize, 0));
         return prev;
     }
 }
@@ -633,7 +670,7 @@ void swapChild(void* parent, void* child) {
 void* addNode(void* root, void* newNode, size_t size) {
     if (root==0) {
         rootMain=newNode;
-        PUT_COLOR(newNode, PACK_COLOR(size, 0, 0));
+        PUT_COLOR(newNode, 0);
         PUT_LEFT(rootMain, 0);
         PUT_RIGHT(rootMain, 0);
         PUT_PARENT(rootMain, 0);

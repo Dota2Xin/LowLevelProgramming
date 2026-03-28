@@ -101,7 +101,7 @@ team_t team = {
 //Points to first free block in the heap. 
 
 static char* firstFree;
-static char* segregatedList;
+static size_t* segregatedList;
 static char* rootPointer;
 static size_t extendSize=CHUNKSIZE;
 
@@ -151,19 +151,19 @@ int mm_init(void)
     char* dump=mem_sbrk(CHUNKSIZE);
     heapSize=CHUNKSIZE;
     segregatedList=heapStart;
-    PUT(heapStart+SEGSIZE,PACK(DSIZE, 1));
-    PUT(heapStart+SEGSIZE+DSIZE, PACK(DSIZE, 1));    
+    PUT(heapStart+SEGSIZE,PACK(2*DSIZE, 1));
+    PUT(heapStart+SEGSIZE+DSIZE, PACK(2*DSIZE, 1));    
     char* heapEnd=mem_heap_hi();
     PUT(heapEnd-DSIZE, PACK(DSIZE, 1));
     
     heapSize-=SEGSIZE+3*DSIZE;
     //initialize our root node for the red black tree
-    rootMain=SEGSIZE+2*DSIZE;
+    rootMain=heapStart+SEGSIZE+2*DSIZE;
     PUT(rootMain, PACK_COLOR(heapSize, 0, 1));
     PUT_LEFT(rootMain, 0);
     PUT_RIGHT(rootMain, 0);
     PUT_PARENT(rootMain, 0);
-    PUT(rootMain+GET_SIZE(rootMain), PACK_COLOR(heapSize, 0, 1));
+    PUT(rootMain+GET_SIZE(rootMain)-DSIZE, PACK_COLOR(heapSize, 0, 1));
     heapStart=rootMain;
     return 0;
 }
@@ -178,11 +178,11 @@ void *mm_malloc(size_t size)
     if (size==0) {
         return NULL;
     }
-    else if ((size+SIZE_T_SIZE)<=MINSIZE) {
+    else if ((size+2*DSIZE)<=MINSIZE) {
         newSize=MINSIZE;
     }
     else {
-        newSize = ALIGN(size + SIZE_T_SIZE);
+        newSize = ALIGN(size + 2*DSIZE);
     }
     
     if (newSize <= SIZECROSS) {
@@ -204,12 +204,12 @@ Once that's done you just put stuff in easily.
 void* addBlockArray(size_t size) {
     int index=size/8-4;
 
-    char* listPointer=GET((char*)segregatedList+index);
+    char* listPointer=GET(segregatedList+index);
 
     //THIS LOOP IS OFF BY ONE MAYBE LOLZ
     while (listPointer==0 && index+1<SEGBASE) {
         index+=1;
-        listPointer=GET((char*)segregatedList+index);
+        listPointer=GET(segregatedList+index);
     }
 
     if (index+1==SEGBASE) {
@@ -313,6 +313,8 @@ void mm_free(void *ptr)
 /*
 loops through all neighboring free nodes accumulating them to give one big node 
 */
+//need to add logic that removes the things we coalesce from their respective data structures before 
+//we coalesce them
 void* coalesce(void* ptr) {
     char prevAlloc=GET_ALLOC(ptr-DSIZE);
     char nextAlloc=GET_ALLOC(ptr+GET_SIZE(ptr));
@@ -321,24 +323,49 @@ void* coalesce(void* ptr) {
     }
     else if (prevAlloc==1 && nextAlloc==0) {
         char* next=ptr+GET_SIZE(ptr);
-        size_t newSize=GET_SIZE(ptr)+GET_SIZE(next);
+        size_t nextSize=GET_SIZE(next);
+        if(nextSize>512) {
+            removeNode(next);
+            //set rootMain to 0 if the tree is empty and that should work
+        } else {
+            removeElement(next, nextSize);
+        }
+        size_t newSize=GET_SIZE(ptr)+nextSize;
         PUT(ptr, PACK(newSize, 0));
-        PUT(ptr+GET_SIZE(ptr)-DSIZE, PACK(newSize, 0));
+        PUT(ptr+newSize-DSIZE, PACK(newSize, 0));
         return ptr;
     }
     else if (prevAlloc==0 && nextAlloc==1) {
-        char* prev=ptr-GET_SIZE(ptr-DSIZE);
-        size_t newSize=GET_SIZE(prev)+GET_SIZE(ptr);
+        char* prev=ptr-GET_SIZE(ptr);
+        size_t prevSize=GET_SIZE(prev);
+        if (prevSize>512) {
+            removeNode(prev);
+        } else {
+            removeElement(prev, prevSize);
+        }
+        size_t newSize=prevSize+GET_SIZE(ptr);
         PUT(prev, PACK(newSize, 0));
-        PUT(ptr+GET_SIZE(ptr)-DSIZE, PACK(newSize, 0));
+        PUT(prev+newSize-DSIZE, PACK(newSize, 0));
         return prev;
     }
     else {
         char* next=ptr+GET_SIZE(ptr);
-        char* prev=ptr-GET_SIZE(ptr-DSIZE);
-        size_t newSize=GET_SIZE(ptr)+GET_SIZE(prev)+GET_SIZE(next);
+        char* prev=ptr-GET_SIZE(ptr);
+        size_t nextSize=GET_SIZE(next);
+        size_t prevSize=GET_SIZE(prev);
+        if (prevSize>512) {
+            removeNode(prev);
+        } else {
+            removeElement(prev, prevSize);
+        }
+        if(nextSize>512) {
+            removeNode(next);
+        } else {
+            removeElement(next, nextSize);
+        }
+        size_t newSize=GET_SIZE(ptr)+prevSize+nextSize;
         PUT(prev, PACK(newSize, 0));
-        PUT(next+GET_SIZE(next)-DSIZE, PACK(newSize, 0));
+        PUT(prev+newSize-DSIZE, PACK(newSize, 0));
         return prev;
     }
 }
@@ -622,6 +649,14 @@ void swapChild(void* parent, void* child) {
 }
 //SHOULD HAVE A COMMAND TO PUT RED/BLACK BIT IN POINTER HEADERS FOR USE HERE
 void* addNode(void* root, void* newNode, size_t size) {
+    if (root==0) {
+        rootMain=newNode;
+        PUT_COLOR(newNode, 0);
+        PUT_LEFT(rootMain, 0);
+        PUT_RIGHT(rootMain, 0);
+        PUT_PARENT(rootMain, 0);
+        return;
+    }
     PUT(newNode, PACK_COLOR(GET_SIZE(newNode),1, GET_ALLOC(newNode) ));
     baseAdd(root, newNode, size);
     insertRecolor(newNode);
@@ -742,6 +777,10 @@ void insertRecolor(void* newNode) {
 
 
 void removeNode(void* removeNode) {
+    if(GET_LEFT_CHILD(removeNode)==0 && GET_RIGHT_CHILD(removeNode)==0 && GET_PARENT(removeNode)==0) {
+        rootMain=0;
+        return;
+    } 
     baseRemove(removeNode);
     deleteRecolor(removeNode);
     return;
@@ -1091,13 +1130,3 @@ void* recurse(void* root, void* lastLarger, size_t size) {
     }
 
 }
-
-
-
-
-
-
-
-
-
-
