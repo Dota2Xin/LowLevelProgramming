@@ -409,6 +409,7 @@ static void test_free_many(void)
     for (int i = 0; i < 20; i++) {
         void *p = mm_malloc((i + 1) * 16);
         if (!p) { ok = 0; break; }
+        //breaks at i=1 apparently still
         mm_free(p);
         if (!heap_consistent()) { 
             ok = 0;

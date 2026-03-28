@@ -313,6 +313,8 @@ void mm_free(void *ptr)
 /*
 loops through all neighboring free nodes accumulating them to give one big node 
 */
+//need to add logic that removes the things we coalesce from their respective data structures before 
+//we coalesce them
 void* coalesce(void* ptr) {
     char prevAlloc=GET_ALLOC(ptr-DSIZE);
     char nextAlloc=GET_ALLOC(ptr+GET_SIZE(ptr));
@@ -321,13 +323,19 @@ void* coalesce(void* ptr) {
     }
     else if (prevAlloc==1 && nextAlloc==0) {
         char* next=ptr+GET_SIZE(ptr);
-        size_t newSize=GET_SIZE(ptr)+GET_SIZE(next);
+        size_t nextSize=GET_SIZE(next);
+        if(nextSize>=512) {
+            //set rootMain to 0 if the tree is empty and that should work
+        } else {
+            removeElement(next, nextSize);
+        }
+        size_t newSize=GET_SIZE(ptr)+nextSize;
         PUT(ptr, PACK(newSize, 0));
         PUT(ptr+GET_SIZE(ptr)-DSIZE, PACK(newSize, 0));
         return ptr;
     }
     else if (prevAlloc==0 && nextAlloc==1) {
-        char* prev=ptr-GET_SIZE(ptr-DSIZE);
+        char* prev=ptr-GET_SIZE(ptr);
         size_t newSize=GET_SIZE(prev)+GET_SIZE(ptr);
         PUT(prev, PACK(newSize, 0));
         PUT(ptr+GET_SIZE(ptr)-DSIZE, PACK(newSize, 0));
@@ -335,11 +343,11 @@ void* coalesce(void* ptr) {
     }
     else {
         char* next=ptr+GET_SIZE(ptr);
-        char* prev=ptr-GET_SIZE(ptr-DSIZE);
+        char* prev=ptr-GET_SIZE(ptr);
         //SOMETHING WRONG HERE
         size_t newSize=GET_SIZE(ptr)+GET_SIZE(prev)+GET_SIZE(next);
         PUT(prev, PACK(newSize, 0));
-        PUT(next+GET_SIZE(next)-DSIZE, PACK(newSize, 0));
+        PUT(prev+GET_SIZE(prev)-DSIZE, PACK(newSize, 0));
         return prev;
     }
 }
@@ -623,6 +631,14 @@ void swapChild(void* parent, void* child) {
 }
 //SHOULD HAVE A COMMAND TO PUT RED/BLACK BIT IN POINTER HEADERS FOR USE HERE
 void* addNode(void* root, void* newNode, size_t size) {
+    if (root==0) {
+        rootMain=newNode;
+        PUT_COLOR(newNode, PACK_COLOR(size, 0, 0));
+        PUT_LEFT(rootMain, 0);
+        PUT_RIGHT(rootMain, 0);
+        PUT_PARENT(rootMain, 0);
+        return;
+    }
     PUT(newNode, PACK_COLOR(GET_SIZE(newNode),1, GET_ALLOC(newNode) ));
     baseAdd(root, newNode, size);
     insertRecolor(newNode);
@@ -743,6 +759,10 @@ void insertRecolor(void* newNode) {
 
 
 void removeNode(void* removeNode) {
+    if(GET_LEFT_CHILD(removeNode)==0 && GET_RIGHT_CHILD(removeNode)==0 && GET_PARENT(removeNode)==0) {
+        rootMain=0;
+        return;
+    } 
     baseRemove(removeNode);
     deleteRecolor(removeNode);
     return;
