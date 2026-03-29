@@ -214,7 +214,10 @@ void* addBlockArray(size_t size) {
 
     if (index+1==SEGBASE) {
         //we don't have any location to place our stuff so we have to go to our tree and break it up
+        printf("HIT MY LINE TWIN\n");
         listPointer=breakTree(size);
+    } else {
+        removeElement(listPointer, GET_SIZE(listPointer));
     }
 
     //list pointer gives us the location in memory that our free block is at.
@@ -271,10 +274,13 @@ Finds the smallest node with value>size and then breaks it up into a chunk to be
 values are close enough and into a chunk to be put back in as a free node, returns pointer to allocated node
 */
 void* breakTree(size_t size) {
+    printf("Root Main %lu \n",rootMain);
     char* nodePointer=searchSize(rootMain, size);
     if (nodePointer==0) {
         //need to extend the heap
         //I think this is wrong
+        printf("I aint hit back mb\n");
+        printf("Sizgin %lu", size);
         nodePointer=extendHeap(size);
         return nodePointer;
     }
@@ -410,7 +416,7 @@ void *mm_realloc(void *ptr, size_t size)
 
 
 
-//HEAP GROWTH WILL HAVE TO REIMPLEMENT TO ADD BLOCKS TO THE TREE ONCE THAT IS SETUP
+//COALESCE ISSUE, HAVE TO REMOVE CERTAIN FREE BLOCKS
 void* extendHeap(size_t requested) {
     size_t growSize=MAX(extendSize, requested);
     char* boundary=mem_sbrk(growSize);
@@ -418,10 +424,15 @@ void* extendHeap(size_t requested) {
     char checkPrev=GET_ALLOC(boundary-2*DSIZE);
     if (checkPrev) {
         //get the previous block which we now know is free from checkprev
-        char* prevBlock=boundary-3*DSIZE-GET_SIZE(boundary-2*DSIZE);
-
+        char* prevBlock=boundary-DSIZE-GET_SIZE(boundary-2*DSIZE);
+        size_t prevSize=GET_SIZE(prevBlock);
+        if (prevSize<=SIZECROSS) {
+            removeElement(prevBlock, prevSize);
+        } else {
+            removeNode(prevBlock);
+        }
         //make new free block+epilogue block
-        size_t newSize=GET_SIZE(prevBlock)+growSize-DSIZE;
+        size_t newSize=prevSize+growSize;
         PUT(prevBlock, PACK(newSize, 0));
         PUT(prevBlock+newSize, PACK(newSize, 0));
         PUT(boundary+growSize-DSIZE, PACK(DSIZE, 1));
@@ -1116,6 +1127,9 @@ void* getSmallest(void* root) {
 //greater than your current node then you return the last parent you went left from i.e. the last node you passed
 // that was larger than you.
 void* searchSize(void* root, size_t size) {
+    if (root==0) {
+        return 0;
+    }
     return recurse(root, root, size);
 }
 

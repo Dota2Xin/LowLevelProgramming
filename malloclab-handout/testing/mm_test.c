@@ -43,7 +43,23 @@
 #define HDRP(bp)        ((char *)(bp) - WSIZE)
 #define FTRP(bp)        ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
 #define ALIGN(s)        (((s) + (ALIGNMENT-1)) & ~0x7)
+ #define PACK_COLOR(size, color, alloc) ((size) | (2*(color)) | (alloc))
  
+#define PUT_COLOR(p, color) \
+    (PUT(p, PACK_COLOR(GET_SIZE(p), color, GET_ALLOC(p))))
+ 
+/* Tree child/parent accessors */
+#define GET_LEFT_CHILD(p)  (GET(((char*)(p)) + DSIZE))
+#define GET_RIGHT_CHILD(p) (GET(((char*)(p)) + 2*DSIZE))
+#define GET_PARENT(p)      (GET(((char*)(p)) + 3*DSIZE))
+ 
+#define PUT_LEFT(root, child)   (PUT(((char*)(root)) + DSIZE,   (unsigned long)(child)))
+#define PUT_RIGHT(root, child)  (PUT(((char*)(root)) + 2*DSIZE, (unsigned long)(child)))
+#define PUT_PARENT(root, par)   (PUT(((char*)(root)) + 3*DSIZE, (unsigned long)(par)))
+ 
+/* Aliases used in some tree functions */
+#define LEFT_CHILD(p)   GET_LEFT_CHILD(p)
+#define RIGHT_CHILD(p)  GET_RIGHT_CHILD(p)
 /* ------------------------------------------------------------------ */
 /* Test framework                                                       */
 /* ------------------------------------------------------------------ */
@@ -65,7 +81,7 @@ static void reset(void)
     mem_reset();
     mm_init();
 }
- 
+extern char* rootMain;
 /* ------------------------------------------------------------------ */
 /* Heap consistency checker                                             */
 /* ------------------------------------------------------------------ */
@@ -508,7 +524,53 @@ static void test_stress_random_sizes(void)
     free(ptrs);
     if (ok) PASS(); else FAIL("NULL, misaligned, or OOB pointer");
 }
- 
+#define RED       1
+#define BLACK     0
+void print_binary_tree(void *root)
+{
+    if (root == 0) {
+        printf("[empty tree]\n");
+        return;
+    }
+
+    /* Queue entries: pointer + depth + side label */
+    typedef struct { void *node; int depth; char side; } QEntry;
+
+    QEntry queue[512];
+    int head = 0, tail = 0;
+
+    queue[tail++] = (QEntry){root, 0, 'R'};  /* R = root */
+
+    int cur_depth = -1;
+
+    while (head < tail) {
+        QEntry e = queue[head++];
+        void *n  = e.node;
+
+        /* New depth = new row */
+        if (e.depth != cur_depth) {
+            cur_depth = e.depth;
+            printf("\n[depth %d]  ", cur_depth);
+        }
+
+        /* Print node: size, color, which side it is */
+        char color  = GET_COLOR(n) == BLACK ? 'B' : 'R';
+        void *left  = (void *)GET_LEFT_CHILD(n);
+        void *right = (void *)GET_RIGHT_CHILD(n);
+        void *par   = (void *)GET_PARENT(n);
+
+        printf("%c:sz=%lu(%c,p=%lu)  ",
+               e.side,
+               GET_SIZE(n),
+               color,
+               par ? GET_SIZE(par) : 0);
+
+        if (left)  queue[tail++] = (QEntry){left,  e.depth + 1, 'L'};
+        if (right) queue[tail++] = (QEntry){right, e.depth + 1, 'R'};
+    }
+    printf("\n");
+}
+
 static void test_stress_alloc_free_interleaved(void)
 {
     TEST("Stress: interleaved alloc/free – heap consistent at end");
@@ -521,6 +583,8 @@ static void test_stress_alloc_free_interleaved(void)
         /* Allocate */
         for (int i = 0; i < NS; i++) {
             ptrs[i] = mm_malloc((i+1) * 8 + round * 32);
+            printf("ADDED SIZE: %lu\n", GET_SIZE(ptrs[i]-DSIZE));
+            print_binary_tree(rootMain);
             if (!ptrs[i]) { ok = 0; break; }
             memset(ptrs[i], 0xCC, (i+1)*8 + round*32);
         }
@@ -528,6 +592,12 @@ static void test_stress_alloc_free_interleaved(void)
         /* Free every other one */
         for (int i = 0; i < NS; i += 2) {
             printf("Break at free %i \n", i);
+            if(heap_consistent) {
+                printf("Still Consistent\n");
+            }
+            printf("WE ARE SIZE: %lu\n", GET_SIZE(ptrs[i]-DSIZE));
+            printf("NEXT SIZE %lu\n", GET_SIZE(ptrs[i+1]-DSIZE));
+            print_binary_tree(rootMain);
             mm_free(ptrs[i]);
             ptrs[i] = NULL;
         }
