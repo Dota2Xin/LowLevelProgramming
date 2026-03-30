@@ -583,27 +583,27 @@ static void test_stress_alloc_free_interleaved(void)
         /* Allocate */
         for (int i = 0; i < NS; i++) {
             ptrs[i] = mm_malloc((i+1) * 8 + round * 32);
-            printf("ADDED SIZE: %lu\n", GET_SIZE(ptrs[i]-DSIZE));
-            print_binary_tree(rootMain);
+            //printf("ADDED SIZE: %lu\n", GET_SIZE(ptrs[i]-DSIZE));
+            //print_binary_tree(rootMain);
             if (!ptrs[i]) { ok = 0; break; }
             memset(ptrs[i], 0xCC, (i+1)*8 + round*32);
         }
         if (!ok) break;
         /* Free every other one */
         for (int i = 0; i < NS; i += 2) {
-            printf("Break at free %i \n", i);
-            if(heap_consistent) {
-                printf("Still Consistent\n");
-            }
-            printf("WE ARE SIZE: %lu\n", GET_SIZE(ptrs[i]-DSIZE));
-            printf("NEXT SIZE %lu\n", GET_SIZE(ptrs[i+1]-DSIZE));
-            print_binary_tree(rootMain);
+            //printf("Break at free %i \n", i);
+            //if(heap_consistent) {
+            //    printf("Still Consistent\n");
+            //}
+            //printf("WE ARE SIZE: %lu\n", GET_SIZE(ptrs[i]-DSIZE));
+            //printf("NEXT SIZE %lu\n", GET_SIZE(ptrs[i+1]-DSIZE));
+            //print_binary_tree(rootMain);
             mm_free(ptrs[i]);
             ptrs[i] = NULL;
         }
         /* Re-allocate those slots */
         for (int i = 0; i < NS; i += 2) {
-            ptrs[i] = mm_malloc((i+1) * 8);
+            ptrs[i] = mm_malloc((i+1) * 8);            
             if (!ptrs[i]) { ok = 0; break; }
         }
         if (!ok) break;

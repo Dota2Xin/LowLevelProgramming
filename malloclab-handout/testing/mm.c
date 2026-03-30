@@ -214,7 +214,7 @@ void* addBlockArray(size_t size) {
 
     if (index+1==SEGBASE) {
         //we don't have any location to place our stuff so we have to go to our tree and break it up
-        printf("HIT MY LINE TWIN\n");
+        //printf("HIT MY LINE TWIN\n");
         listPointer=breakTree(size);
     } else {
         removeElement(listPointer, GET_SIZE(listPointer));
@@ -260,6 +260,7 @@ void addFree(void* ptr, size_t size) {
             char* listBlock=GET(segregatedList+index);
             PUT(segregatedList+index, ptr);
             PUT_NEXT(ptr, listBlock);
+            PUT_PREV(ptr, 0);
             PUT_PREV(listBlock, ptr);
         }
         return;
@@ -273,14 +274,13 @@ void addFree(void* ptr, size_t size) {
 Finds the smallest node with value>size and then breaks it up into a chunk to be allocated (sometimes the whole node) if 
 values are close enough and into a chunk to be put back in as a free node, returns pointer to allocated node
 */
+//watch -location *((char[0x20] *)  0x55555555e2d0)
 void* breakTree(size_t size) {
-    printf("Root Main %lu \n",rootMain);
+    //printf("Root Main %lu \n",rootMain);
     char* nodePointer=searchSize(rootMain, size);
     if (nodePointer==0) {
-        //need to extend the heap
-        //I think this is wrong
-        printf("I aint hit back mb\n");
-        printf("Sizgin %lu", size);
+        //printf("I aint hit back mb\n");
+        //printf("Sizgin %lu", size);
         nodePointer=extendHeap(size);
         return nodePointer;
     }
@@ -361,7 +361,7 @@ void* coalesce(void* ptr) {
         return ptr;
     }
     else if (prevAlloc==0 && nextAlloc==1) {
-        char* prev=ptr-GET_SIZE(ptr);
+        char* prev=ptr-GET_SIZE(ptr-DSIZE);
         size_t prevSize=GET_SIZE(prev);
         if (prevSize>512) {
             removeNode(prev);
@@ -375,7 +375,7 @@ void* coalesce(void* ptr) {
     }
     else {
         char* next=ptr+GET_SIZE(ptr);
-        char* prev=ptr-GET_SIZE(ptr);
+        char* prev=ptr-GET_SIZE(ptr-DSIZE);
         size_t nextSize=GET_SIZE(next);
         size_t prevSize=GET_SIZE(prev);
         if (prevSize>512) {
@@ -416,7 +416,7 @@ void *mm_realloc(void *ptr, size_t size)
 
 
 
-//COALESCE ISSUE, HAVE TO REMOVE CERTAIN FREE BLOCKS
+//SOMETHING WRONG DON'T KNOW WHAT
 void* extendHeap(size_t requested) {
     size_t growSize=MAX(extendSize, requested);
     char* boundary=mem_sbrk(growSize);
