@@ -443,8 +443,8 @@ void* extendHeap(size_t requested) {
     }
     //Previous block is allocated then we just make free block (using epilogue block from old heap up as well)
     char* newBlock=boundary-DSIZE;
-    PUT(newBlock, PACK(growSize-DSIZE, 0));
-    PUT(newBlock+growSize-DSIZE, PACK(growSize-DSIZE, 0));
+    PUT(newBlock, PACK(growSize, 0));
+    PUT(newBlock+growSize-DSIZE, PACK(growSize, 0));
     PUT(newBlock+growSize, PACK(DSIZE, 1));
 
     extendSize = ALIGN(growSize + growSize / 3);

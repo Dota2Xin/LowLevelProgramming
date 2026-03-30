@@ -582,6 +582,10 @@ static void test_stress_alloc_free_interleaved(void)
     for (int round = 0; round < 3; round++) {
         /* Allocate */
         for (int i = 0; i < NS; i++) {
+            //if(!heap_consistent()) {
+            //    printf("Heap Error 1, %i\n", i);
+            //    printf("Round: %i\n", round);
+            //}
             ptrs[i] = mm_malloc((i+1) * 8 + round * 32);
             //printf("ADDED SIZE: %lu\n", GET_SIZE(ptrs[i]-DSIZE));
             //print_binary_tree(rootMain);
@@ -598,17 +602,29 @@ static void test_stress_alloc_free_interleaved(void)
             //printf("WE ARE SIZE: %lu\n", GET_SIZE(ptrs[i]-DSIZE));
             //printf("NEXT SIZE %lu\n", GET_SIZE(ptrs[i+1]-DSIZE));
             //print_binary_tree(rootMain);
+            //if(!heap_consistent()) {
+            //    printf("Heap Error 2, %i\n", i);
+            //    printf("Round: %i\n", round);
+            //}
             mm_free(ptrs[i]);
             ptrs[i] = NULL;
         }
         /* Re-allocate those slots */
         for (int i = 0; i < NS; i += 2) {
+            /* if(!heap_consistent()) {
+                printf("Heap Error 3, %i\n", i);
+                printf("Round: %i\n", round);
+            } */
             ptrs[i] = mm_malloc((i+1) * 8);            
             if (!ptrs[i]) { ok = 0; break; }
         }
         if (!ok) break;
         /* Free everything */
         for (int i = 0; i < NS; i++) {
+            /* if(!heap_consistent()) {
+                printf("Heap Error 4, %i\n", i);
+                printf("Round: %i\n", round);
+            } */
             if (ptrs[i]) { mm_free(ptrs[i]); ptrs[i] = NULL; }
         }
         if (!heap_consistent()) { ok = 0; break; }
