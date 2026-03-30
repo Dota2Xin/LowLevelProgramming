@@ -130,6 +130,8 @@ char* rootMain;
 char* heapStart;
 char* heapEnd;
 /*
+Important: I think I might need to implement my own testing/timing suite to compare to the main C lib and then go from there. 
+it might also be useful to consider paging in chunks all devoted to a certain type of memory. 
 DESIGN IDEAS:
 1. Might need a tree bit stored somewhere to check if we even have a tree when using our functions
 2. If we are too fragmented then getting rid of footers on allocated blocks is almost certainly the first thing to fix,

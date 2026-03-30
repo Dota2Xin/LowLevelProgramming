@@ -1,3 +1,4 @@
+//mdriver -V -f short1-bal.rep
 /*
  * mm-naive.c - The fastest, least memory-efficient malloc package.
  * 
@@ -214,7 +215,10 @@ void* addBlockArray(size_t size) {
 
     if (index+1==SEGBASE) {
         //we don't have any location to place our stuff so we have to go to our tree and break it up
+        //printf("HIT MY LINE TWIN\n");
         listPointer=breakTree(size);
+    } else {
+        removeElement(listPointer, GET_SIZE(listPointer));
     }
 
     //list pointer gives us the location in memory that our free block is at.
@@ -257,6 +261,7 @@ void addFree(void* ptr, size_t size) {
             char* listBlock=GET(segregatedList+index);
             PUT(segregatedList+index, ptr);
             PUT_NEXT(ptr, listBlock);
+            PUT_PREV(ptr, 0);
             PUT_PREV(listBlock, ptr);
         }
         return;
@@ -270,11 +275,13 @@ void addFree(void* ptr, size_t size) {
 Finds the smallest node with value>size and then breaks it up into a chunk to be allocated (sometimes the whole node) if 
 values are close enough and into a chunk to be put back in as a free node, returns pointer to allocated node
 */
+//watch -location *((char[0x20] *)  0x55555555e2d0)
 void* breakTree(size_t size) {
+    //printf("Root Main %lu \n",rootMain);
     char* nodePointer=searchSize(rootMain, size);
     if (nodePointer==0) {
-        //need to extend the heap
-        //NEED TO FIX EXTEND HEAP TO RETURN PROPER POINTERS AND WHATNOTSKIS
+        //printf("I aint hit back mb\n");
+        //printf("Sizgin %lu", size);
         nodePointer=extendHeap(size);
         return nodePointer;
     }
@@ -297,7 +304,24 @@ void* breakTree(size_t size) {
 }
 
 void* addBlockTree(size_t size) {
-    return breakTree(size);
+    //list pointer gives us the location in memory that our free block is at.
+    //now we check the size of the free block, if it's less than size+32 we use the entire block up
+    //on the otherhand if we have more than that then we break up everything after size into its own free block.
+    char* listPointer=breakTree(size);
+    size_t checkSize=GET_SIZE(listPointer);
+
+    //early return in here
+    if(checkSize<size+32) {
+        PUT(listPointer, PACK(checkSize, 1));
+        PUT(listPointer+GET_SIZE(listPointer)-DSIZE, PACK(checkSize, 1));
+        //have to add correct allocation bits at foot somehow...
+        return listPointer+DSIZE;
+    }
+
+    makeFree(listPointer+size, checkSize-size);
+    PUT(listPointer, PACK(size, 1));
+    PUT(listPointer+GET_SIZE(listPointer)-DSIZE, PACK(size, 1));
+    return listPointer+DSIZE;
 }
 
 /*
@@ -305,6 +329,8 @@ void* addBlockTree(size_t size) {
  */
 void mm_free(void *ptr)
 {
+    //heap could mess up and not properly store children so that when we create/add a node somewhere it cou;d
+    //end up with spurious children?????
     char* newPointer=coalesce((char*)ptr-DSIZE);
     size_t freeSize=GET_SIZE(newPointer);
     makeFree(newPointer, freeSize);
@@ -336,7 +362,7 @@ void* coalesce(void* ptr) {
         return ptr;
     }
     else if (prevAlloc==0 && nextAlloc==1) {
-        char* prev=ptr-GET_SIZE(ptr);
+        char* prev=ptr-GET_SIZE(ptr-DSIZE);
         size_t prevSize=GET_SIZE(prev);
         if (prevSize>512) {
             removeNode(prev);
@@ -350,7 +376,7 @@ void* coalesce(void* ptr) {
     }
     else {
         char* next=ptr+GET_SIZE(ptr);
-        char* prev=ptr-GET_SIZE(ptr);
+        char* prev=ptr-GET_SIZE(ptr-DSIZE);
         size_t nextSize=GET_SIZE(next);
         size_t prevSize=GET_SIZE(prev);
         if (prevSize>512) {
@@ -391,7 +417,7 @@ void *mm_realloc(void *ptr, size_t size)
 
 
 
-//HEAP GROWTH WILL HAVE TO REIMPLEMENT TO ADD BLOCKS TO THE TREE ONCE THAT IS SETUP
+//SOMETHING WRONG DON'T KNOW WHAT
 void* extendHeap(size_t requested) {
     size_t growSize=MAX(extendSize, requested);
     char* boundary=mem_sbrk(growSize);
@@ -399,10 +425,15 @@ void* extendHeap(size_t requested) {
     char checkPrev=GET_ALLOC(boundary-2*DSIZE);
     if (checkPrev) {
         //get the previous block which we now know is free from checkprev
-        char* prevBlock=boundary-3*DSIZE-GET_SIZE(boundary-2*DSIZE);
-
+        char* prevBlock=boundary-DSIZE-GET_SIZE(boundary-2*DSIZE);
+        size_t prevSize=GET_SIZE(prevBlock);
+        if (prevSize<=SIZECROSS) {
+            removeElement(prevBlock, prevSize);
+        } else {
+            removeNode(prevBlock);
+        }
         //make new free block+epilogue block
-        size_t newSize=GET_SIZE(prevBlock)+growSize-DSIZE;
+        size_t newSize=prevSize+growSize;
         PUT(prevBlock, PACK(newSize, 0));
         PUT(prevBlock+newSize, PACK(newSize, 0));
         PUT(boundary+growSize-DSIZE, PACK(DSIZE, 1));
@@ -413,8 +444,8 @@ void* extendHeap(size_t requested) {
     }
     //Previous block is allocated then we just make free block (using epilogue block from old heap up as well)
     char* newBlock=boundary-DSIZE;
-    PUT(newBlock, PACK(growSize-DSIZE, 0));
-    PUT(newBlock+growSize-DSIZE, PACK(growSize-DSIZE, 0));
+    PUT(newBlock, PACK(growSize, 0));
+    PUT(newBlock+growSize-DSIZE, PACK(growSize, 0));
     PUT(newBlock+growSize, PACK(DSIZE, 1));
 
     extendSize = ALIGN(growSize + growSize / 3);
@@ -1097,6 +1128,9 @@ void* getSmallest(void* root) {
 //greater than your current node then you return the last parent you went left from i.e. the last node you passed
 // that was larger than you.
 void* searchSize(void* root, size_t size) {
+    if (root==0) {
+        return 0;
+    }
     return recurse(root, root, size);
 }
 

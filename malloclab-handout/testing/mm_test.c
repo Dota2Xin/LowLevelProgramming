@@ -716,6 +716,232 @@ static void test_double_free_safety(void)
 }
  
 /* ------------------------------------------------------------------ */
+/* Trace-replay diagnostic tests                                        */
+/*                                                                      */
+/* Replays the failing trace:                                           */
+/*   a 0 2040  a 1 4010  a 2 48  a 3 4072  a 4 4072  a 5 4072         */
+/*   f 0  f 1  f 2  f 3  f 4  f 5                                      */
+/*                                                                      */
+/* The 64-bit note: the lab was designed for 32-bit pointers (4 bytes) */
+/* but is compiled 64-bit here (8-byte pointers). WSIZE/DSIZE are      */
+/* already 8 in mm.c so the header/footer macros are correct, but      */
+/* block sizes will be larger than the trace expects.                   */
+/* ------------------------------------------------------------------ */
+ 
+/*
+ * Allocate all six trace blocks and return 1 if every pointer is
+ * non-NULL, aligned, and within the heap.  Fills each block with a
+ * unique sentinel byte so we can detect corruption later.
+ */
+static int trace_alloc_all(void *ptrs[6])
+{
+    size_t sizes[6] = {2040, 4010, 48, 4072, 4072, 4072};
+    for (int i = 0; i < 6; i++) {
+        ptrs[i] = mm_malloc(sizes[i]);
+        if (!ptrs[i] || !aligned(ptrs[i]) || !in_heap(ptrs[i]))
+            return 0;
+        memset(ptrs[i], 0xA0 + i, sizes[i]);
+    }
+    return 1;
+}
+ 
+/* T1 – every alloc succeeds, is aligned, is in-heap */
+static void test_trace_allocs_valid(void)
+{
+    TEST("Trace: all 6 allocs return valid pointers");
+    reset();
+    void *ptrs[6];
+    if (trace_alloc_all(ptrs))
+        PASS();
+    else
+        FAIL("at least one alloc returned NULL/misaligned/OOB");
+}
+ 
+/* T2 – heap is consistent immediately after the 6 allocs */
+static void test_trace_heap_after_allocs(void)
+{
+    TEST("Trace: heap consistent after 6 allocs");
+    reset();
+    void *ptrs[6];
+    if (!trace_alloc_all(ptrs)) { FAIL("alloc failed"); return; }
+    if (heap_consistent()) PASS(); else FAIL("heap inconsistent after allocs");
+}
+ 
+/* T3 – sentinel bytes are intact (no overlaps between blocks) */
+static void test_trace_no_overlap(void)
+{
+    TEST("Trace: no overlap between the 6 allocated blocks");
+    reset();
+    void *ptrs[6];
+    size_t sizes[6] = {2040, 4010, 48, 4072, 4072, 4072};
+    if (!trace_alloc_all(ptrs)) { FAIL("alloc failed"); return; }
+    int ok = 1;
+    for (int i = 0; i < 6 && ok; i++) {
+        unsigned char *p = ptrs[i];
+        for (size_t j = 0; j < sizes[i] && ok; j++)
+            if (p[j] != (unsigned char)(0xA0 + i)) ok = 0;
+    }
+    if (ok) PASS(); else FAIL("sentinel byte corrupted – blocks overlap");
+}
+ 
+/* T4 – free block 0 (2040 bytes, array/tree boundary) */
+static void test_trace_free0(void)
+{
+    TEST("Trace: free ptrs[0]=2040 – heap consistent");
+    reset();
+    void *ptrs[6];
+    if (!trace_alloc_all(ptrs)) { FAIL("alloc failed"); return; }
+    mm_free(ptrs[0]); ptrs[0] = NULL;
+    if (heap_consistent()) PASS(); else FAIL("heap inconsistent after free[0]");
+}
+ 
+/* T5 – free block 1 (4010 bytes, large/tree path) */
+static void test_trace_free1(void)
+{
+    TEST("Trace: free ptrs[1]=4010 – heap consistent");
+    reset();
+    void *ptrs[6];
+    if (!trace_alloc_all(ptrs)) { FAIL("alloc failed"); return; }
+    mm_free(ptrs[0]); ptrs[0] = NULL;
+    mm_free(ptrs[1]); ptrs[1] = NULL;
+    if (heap_consistent()) PASS(); else FAIL("heap inconsistent after free[1]");
+}
+ 
+/* T6 – free block 2 (48 bytes, small/array path) */
+static void test_trace_free2(void)
+{
+    TEST("Trace: free ptrs[2]=48 – heap consistent");
+    reset();
+    void *ptrs[6];
+    if (!trace_alloc_all(ptrs)) { FAIL("alloc failed"); return; }
+    mm_free(ptrs[0]); ptrs[0] = NULL;
+    mm_free(ptrs[1]); ptrs[1] = NULL;
+    mm_free(ptrs[2]); ptrs[2] = NULL;
+    if (heap_consistent()) PASS(); else FAIL("heap inconsistent after free[2]");
+}
+ 
+/* T7 – free blocks 3,4,5 (three consecutive 4072-byte blocks) */
+static void test_trace_free_large_trio(void)
+{
+    TEST("Trace: free ptrs[3,4,5]=4072 each – heap consistent");
+    reset();
+    void *ptrs[6];
+    if (!trace_alloc_all(ptrs)) { FAIL("alloc failed"); return; }
+    for (int i = 0; i < 6; i++) { mm_free(ptrs[i]); ptrs[i] = NULL; }
+    if (heap_consistent()) PASS(); else FAIL("heap inconsistent after all frees");
+}
+ 
+/* T8 – full trace: alloc all, free all in order, check consistency */
+static void test_trace_full(void)
+{
+    TEST("Trace: full replay (alloc 6 then free 6 in order)");
+    reset();
+    void *ptrs[6];
+    if (!trace_alloc_all(ptrs)) { FAIL("alloc failed"); return; }
+    for (int i = 0; i < 6; i++) {
+        mm_free(ptrs[i]);
+        ptrs[i] = NULL;
+        if (!heap_consistent()) {
+            printf("\n  FAIL at free[%d]\n", i);
+            FAIL("heap inconsistent mid-free");
+            return;
+        }
+    }
+    PASS();
+}
+ 
+/* T9 – after full trace, heap must not have grown beyond first extension.
+ * Freed memory should be fully coalesced and reusable.               */
+static void test_trace_reuse_after_full_free(void)
+{
+    TEST("Trace: large alloc succeeds after full free (coalescing)");
+    reset();
+    void *ptrs[6];
+    if (!trace_alloc_all(ptrs)) { FAIL("alloc failed"); return; }
+    size_t before = mem_heapsize();
+    for (int i = 0; i < 6; i++) { mm_free(ptrs[i]); ptrs[i] = NULL; }
+ 
+    /* The total payload was 2040+4010+48+4072+4072+4072 = 18314 bytes.
+     * After coalescing we should be able to re-allocate a chunk of that
+     * without the heap growing.                                        */
+    void *big = mm_malloc(8000);
+    size_t after = mem_heapsize();
+    if (!big)         { FAIL("large re-alloc returned NULL"); return; }
+    if (after > before) { FAIL("heap grew – freed blocks not coalesced/reused"); return; }
+    PASS();
+}
+ 
+/* T10 – isolate the small block (48 bytes) in the middle of large ones.
+ * This specifically stresses coalescing across array/tree boundaries. */
+static void test_trace_small_between_large(void)
+{
+    TEST("Trace: free large,small,large – small block coalesced correctly");
+    reset();
+    void *ptrs[6];
+    if (!trace_alloc_all(ptrs)) { FAIL("alloc failed"); return; }
+ 
+    /* Free the small block flanked by large ones */
+    mm_free(ptrs[1]); ptrs[1] = NULL;   /* 4010 – left neighbour  */
+    mm_free(ptrs[2]); ptrs[2] = NULL;   /* 48   – the small block */
+    mm_free(ptrs[3]); ptrs[3] = NULL;   /* 4072 – right neighbour */
+ 
+    if (!heap_consistent()) { FAIL("heap inconsistent after flanked free"); return; }
+ 
+    /* Now we should be able to allocate something larger than 48 bytes
+     * in the coalesced region without heap growth                     */
+    size_t before = mem_heapsize();
+    void *mid = mm_malloc(4000);
+    size_t after = mem_heapsize();
+    if (!mid)         { FAIL("re-alloc in coalesced region returned NULL"); return; }
+    if (after > before) { FAIL("heap grew – coalescing across small/large boundary failed"); return; }
+    PASS();
+}
+
+/* T11 – three identical large blocks (ptrs[3,4,5]=4072) freed in order.
+ * Each free should coalesce with the previous, producing one big block. */
+static void test_trace_consecutive_large_coalesce(void)
+{
+    TEST("Trace: three consecutive 4072 frees coalesce into one block");
+    reset();
+    void *ptrs[6];
+    if (!trace_alloc_all(ptrs)) { FAIL("alloc failed"); return; }
+ 
+    /* Free only the three large identical blocks */
+    size_t before = mem_heapsize();
+    mm_free(ptrs[3]); ptrs[3] = NULL;
+    mm_free(ptrs[4]); ptrs[4] = NULL;
+    mm_free(ptrs[5]); ptrs[5] = NULL;
+ 
+    if (!heap_consistent()) { FAIL("heap inconsistent"); return; }
+ 
+    /* Should be able to allocate 3*4072/2 worth in one shot */
+    void *big = mm_malloc(4072 * 2);
+    size_t after = mem_heapsize();
+    if (!big)         { FAIL("large alloc in coalesced region failed"); return; }
+    if (after > before) { FAIL("heap grew – three large blocks not coalesced"); return; }
+    PASS();
+}
+ 
+/* T12 – 64-bit pointer size check.
+ * In the original 32-bit design a pointer is 4 bytes; in 64-bit it's 8.
+ * The free-list next/prev pointers stored inside free blocks must fit,
+ * so MINSIZE must be >= 4*DSIZE = 32 bytes on 64-bit.               */
+static void test_trace_64bit_minsize(void)
+{
+    TEST("Trace/64-bit: MINSIZE accommodates 64-bit pointers (>=32)");
+    reset();
+    /* Allocate then free the smallest possible block; the resulting
+     * free block header must be at least MINSIZE and store pointers. */
+    void *p = mm_malloc(1);
+    if (!p) { FAIL("alloc failed"); return; }
+    size_t bsz = GET_SIZE(HDRP(p));
+    mm_free(p);
+    if (bsz >= 32 && heap_consistent())
+        PASS();
+    else
+        FAIL("block too small for 64-bit free-list pointers");
+}
+/* ------------------------------------------------------------------ */
 /* main                                                                 */
 /* ------------------------------------------------------------------ */
  
@@ -775,6 +1001,19 @@ int main(void)
     test_boundary_one_over_sizecross();
     test_boundary_minsize();
     test_double_free_safety();
+    printf("\n--- Trace Replay (failing trace diagnosis) ---\n");
+    test_trace_allocs_valid();
+    test_trace_heap_after_allocs();
+    test_trace_no_overlap();
+    test_trace_free0();
+    test_trace_free1();
+    test_trace_free2();
+    test_trace_free_large_trio();
+    test_trace_full();
+    test_trace_reuse_after_full_free();
+    test_trace_small_between_large();
+    test_trace_consecutive_large_coalesce();
+    test_trace_64bit_minsize();
  
     printf("\n============================================================\n");
     printf("  Results: %d / %d passed\n", tests_passed, tests_run);
