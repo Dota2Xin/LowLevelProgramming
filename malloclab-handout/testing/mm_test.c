@@ -921,7 +921,31 @@ static void test_trace_consecutive_large_coalesce(void)
     if (after > before) { FAIL("heap grew – three large blocks not coalesced"); return; }
     PASS();
 }
- 
+
+static void testFullTrace(void) {
+    TEST("TRACE: Equivalent Call");
+    reset();
+    void* ptrs[6];
+    printf("\n");
+    printf("Type: Alloc   | ID: 0 | Size: 2040\n");
+    ptrs[0]=mm_malloc(2040);
+    printf("Type: Alloc   | ID: 1 | Size: 4010\n");
+    ptrs[1]=mm_malloc(4010);
+    printf("Type: Alloc   | ID: 2 | Size: 48\n");
+    ptrs[2]=mm_malloc(48);
+    printf("Type: Alloc   | ID: 3 | Size: 4072\n");
+    ptrs[3]=mm_malloc(4072);
+    printf("Type: Alloc   | ID: 4 | Size: 4072\n");
+    ptrs[4]=mm_malloc(4072);
+    printf("Type: Alloc   | ID: 5 | Size: 4072\n");
+    ptrs[5]=mm_malloc(4072);
+    for (int i=0; i<6; i++) {
+        printf("Type: Free    | ID: %i | Size: 0 \n", i);
+        mm_free(ptrs[i]);
+        if (!heap_consistent()) { FAIL("heap inconsistent"); return; }
+    }
+    PASS();
+}
 /* T12 – 64-bit pointer size check.
  * In the original 32-bit design a pointer is 4 bytes; in 64-bit it's 8.
  * The free-list next/prev pointers stored inside free blocks must fit,
@@ -1014,6 +1038,7 @@ int main(void)
     test_trace_small_between_large();
     test_trace_consecutive_large_coalesce();
     test_trace_64bit_minsize();
+    testFullTrace();
  
     printf("\n============================================================\n");
     printf("  Results: %d / %d passed\n", tests_passed, tests_run);
