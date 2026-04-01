@@ -149,7 +149,7 @@ int mm_init(void)
 {
     //initialize the heap and the prologue+epilogue blocks
     size_t heapSize=0;
-    heapStart=mem_heap_lo();
+    char* heapStart=mem_heap_lo();
     char* dump=mem_sbrk(CHUNKSIZE);
     heapSize=CHUNKSIZE;
     segregatedList=heapStart;

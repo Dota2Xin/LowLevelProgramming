@@ -1,67 +1,201 @@
-#define _POSIX_C_SOURCE 199309L
+/*
+ * grade.c - Trace replay testing framework for mm.c (Static Memory Version)
+ *
+ * Build:
+ * gcc -Wall -Wextra -g -o grade grade.c mm.c memlib.c -lm
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <math.h>
- 
+#include <stdint.h>
+#include <assert.h>
+
 #include "mm.h"
 #include "memlib.h"
 
-typedef struct { char k; int id; size_t sz; } Op;
-double now() { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec + t.tv_nsec * 1e-9; }
+#define ALIGNMENT 8
+#define MAX_OPS 150000
+#define MAX_IDS 150000
 
-int main(int argc, char **argv) {
-    if (argc < 2) return printf("Usage: %s <trace>\n", argv[0]), 1;
-    FILE *f = fopen(argv[1], "r");
-    int ids, ops, junk; 
-    fscanf(f, "%d %d %d %d", &junk, &ids, &ops, &junk);
-    printf("IDS %i, OPS:%i\n", ids, ops);
-    Op *v = malloc(ops * sizeof(Op));
-    for (int i = 0; i < ops; i++) {
-        fscanf(f, " %c %d", &v[i].k, &v[i].id);
-        if (v[i].k != 'f') fscanf(f, "%zu", &v[i].sz);
+/* ------------------------------------------------------------------ */
+/* Test framework                                                     */
+/* ------------------------------------------------------------------ */
+static int tests_run    = 0;
+static int tests_passed = 0;
+
+#define TEST(name) \
+    do { tests_run++; printf("[TEST %2d] %-55s", tests_run, name); } while(0)
+#define PASS() \
+    do { tests_passed++; printf("PASS\n"); } while(0)
+#define FAIL(msg) \
+    do { printf("FAIL - %s\n", msg); } while(0)
+
+static void reset(void)
+{
+    mem_reset();
+    mm_init();
+}
+
+/* ------------------------------------------------------------------ */
+/* Pointer diagnostics                                                */
+/* ------------------------------------------------------------------ */
+static int in_heap(const void *p)
+{
+    return (char *)p >= (char *)mem_heap_lo() &&
+           (char *)p <= (char *)mem_heap_hi();
+}
+
+static int aligned(const void *p)
+{
+    return ((uintptr_t)p % ALIGNMENT) == 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Static Grader State (Bypasses the Libc Heap entirely)              */
+/* ------------------------------------------------------------------ */
+static char   trace_kinds[MAX_OPS];
+static int    trace_ids[MAX_OPS];
+static size_t trace_sizes[MAX_OPS];
+static void* ptrs[MAX_IDS];
+
+static int num_ids = 0;
+static int num_ops = 0;
+
+static int load_trace(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    if (!f) { 
+        perror(path); 
+        return 0; 
     }
-    fclose(f);
 
-    void **p = calloc(ids, sizeof(void*));
-    size_t *s = calloc(ids, sizeof(size_t));
-    size_t peak = 0, cur = 0;
-    printf("HELLO\n");
-    // --- Run MM ---
-    mem_init(); mm_init();
-    double t0 = now();
-    for (int i = 0; i < ops; i++) {
-        if (v[i].k == 'a') {
-            p[v[i].id] = mm_malloc(v[i].sz);
-            s[v[i].id] = v[i].sz; cur += v[i].sz;
-        } else if (v[i].k == 'f') {
-            cur -= s[v[i].id]; mm_free(p[v[i].id]);
+    int junk;
+    /* Header: junk, num_ids, num_ops, junk */
+    if (fscanf(f, "%d %d %d %d", &junk, &num_ids, &num_ops, &junk) != 4) {
+        fclose(f);
+        return 0;
+    }
+
+    if (num_ops > MAX_OPS || num_ids > MAX_IDS) {
+        printf("Trace exceeds static buffer limits.\n");
+        fclose(f);
+        return 0;
+    }
+
+    for (int i = 0; i < num_ops; i++) {
+        fscanf(f, " %c %d", &trace_kinds[i], &trace_ids[i]);
+        if (trace_kinds[i] == 'a' || trace_kinds[i] == 'r') {
+            fscanf(f, "%zu", &trace_sizes[i]);
         } else {
-            cur -= s[v[i].id]; p[v[i].id] = mm_realloc(p[v[i].id], v[i].sz);
-            s[v[i].id] = v[i].sz; cur += v[i].sz;
+            trace_sizes[i] = 0;
         }
-        if (cur > peak) peak = cur;
     }
-    double t_mm = now() - t0;
-    double U = (double)peak / mem_heapsize();
-    printf("Here\n");
-    // --- Run Libc ---
-    memset(p, 0, ids * sizeof(void*));
-    t0 = now();
-    for (int i = 0; i < ops; i++) {
-        if (v[i].k == 'a') p[v[i].id] = malloc(v[i].sz);
-        else if (v[i].k == 'f') free(p[v[i].id]);
-        else p[v[i].id] = realloc(p[v[i].id], v[i].sz);
+
+    fclose(f);
+    return 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Trace Execution Runner                                             */
+/* ------------------------------------------------------------------ */
+static void run_trace_test(const char *filename)
+{
+    char test_name[256];
+    snprintf(test_name, sizeof(test_name), "Trace Replay: %s", filename);
+    
+    if (strlen(test_name) > 50) {
+        strcpy(test_name + 47, "...");
     }
-    double t_libc = now() - t0;
+    
+    TEST(test_name);
 
-    // --- Results ---
-    double T_ratio = t_libc / t_mm; // (Ops/t_mm) / (Ops/t_libc) simplifies to this
-    double P = 0.6 * U + 0.4 * fmin(1.0, T_ratio);
+    if (!load_trace(filename)) {
+        FAIL("Failed to parse trace file");
+        return;
+    }
 
-    printf("Utilization: %.2f%% | T_ratio: %.3f | P: %.4f\n", U*100, T_ratio, P);
+    /* Wipe our static pointer array clean before the run */
+    memset(ptrs, 0, sizeof(ptrs));
+    
+    reset();
 
-    free(v); free(p); free(s);
-    return 0;
+    int ok = 1;
+    char fail_msg[128];
+
+    for (int i = 0; i < num_ops; i++) {
+        char kind = trace_kinds[i];
+        int id = trace_ids[i];
+        size_t size = trace_sizes[i];
+        
+        if (kind == 'a') {
+            ptrs[id] = mm_malloc(size);
+            
+            if (size > 0 && !ptrs[id]) {
+                snprintf(fail_msg, sizeof(fail_msg), "Op %d (Alloc): returned NULL", i);
+                ok = 0; break;
+            }
+            if (size > 0 && !aligned(ptrs[id])) {
+                snprintf(fail_msg, sizeof(fail_msg), "Op %d (Alloc): pointer not aligned", i);
+                ok = 0; break;
+            }
+            if (size > 0 && !in_heap(ptrs[id])) {
+                snprintf(fail_msg, sizeof(fail_msg), "Op %d (Alloc): pointer out of bounds", i);
+                ok = 0; break;
+            }
+
+        } else if (kind == 'f') {
+            mm_free(ptrs[id]);
+            ptrs[id] = NULL;
+            
+        } else if (kind == 'r') {
+            ptrs[id] = mm_realloc(ptrs[id], size);
+            
+            if (size > 0 && !ptrs[id]) {
+                snprintf(fail_msg, sizeof(fail_msg), "Op %d (Realloc): returned NULL", i);
+                ok = 0; break;
+            }
+            if (size > 0 && !aligned(ptrs[id])) {
+                snprintf(fail_msg, sizeof(fail_msg), "Op %d (Realloc): pointer not aligned", i);
+                ok = 0; break;
+            }
+            if (size > 0 && !in_heap(ptrs[id])) {
+                snprintf(fail_msg, sizeof(fail_msg), "Op %d (Realloc): pointer out of bounds", i);
+                ok = 0; break;
+            }
+        }
+    }
+
+    if (ok) {
+        PASS();
+    } else {
+        FAIL(fail_msg);
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* main                                                               */
+/* ------------------------------------------------------------------ */
+int main(int argc, char **argv)
+{
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <trace_file_1.rep> [trace_file_2.rep ...]\n", argv[0]);
+        return 1;
+    }
+
+    mem_init();
+
+    printf("============================================================\n");
+    printf("  mm.c Trace Execution Test Suite (Static Safe)\n");
+    printf("============================================================\n\n");
+
+    for (int i = 1; i < argc; i++) {
+        run_trace_test(argv[i]);
+    }
+
+    printf("\n============================================================\n");
+    printf("  Results: %d / %d traces passed\n", tests_passed, tests_run);
+    printf("============================================================\n");
+
+    return (tests_passed == tests_run) ? 0 : 1;
 }
