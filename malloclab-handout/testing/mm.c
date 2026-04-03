@@ -167,7 +167,8 @@ int mm_init(void)
     PUT_LEFT(rootMain, 0);
     PUT_RIGHT(rootMain, 0);
     PUT_PARENT(rootMain, 0);
-    PUT(rootMain+GET_SIZE(rootMain)-DSIZE, PACK_COLOR(heapSize, 0, 1));
+    PUT(rootMain+GET_SIZE(rootMain)-DSIZE, PACK_COLOR(heapSize, 0, 0));
+    
     heapStart=rootMain;
     return 0;
 }
