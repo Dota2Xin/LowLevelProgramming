@@ -526,7 +526,7 @@ void leftRotate(void* root) {
     }
 
     PUT_PARENT(temp, parent);
-    if (GET_SIZE(root)<=GET_SIZE(parent)) {
+    if (root==GET_LEFT_CHILD(parent)) {
         PUT_LEFT(parent, temp);
     } else {
         PUT_RIGHT(parent, temp);
@@ -555,7 +555,7 @@ void rightRotate(void* root) {
     }
 
     PUT_PARENT(temp, parent);
-    if (GET_SIZE(root)<=GET_SIZE(parent)) {
+    if (root==GET_LEFT_CHILD(parent)) {
         PUT_LEFT(parent, temp);
     } else {
         PUT_RIGHT(parent, temp);
@@ -595,13 +595,13 @@ void swap(void* node1, void* node2) {
     PUT_COLOR(node1, GET_COLOR(node2));
     PUT_COLOR(node2, tempColor);
 
-    if(GET_SIZE(node2)<=GET_SIZE(parent2)) {
+    if(node2==GET_LEFT_CHILD(parent2)) {
             PUT_LEFT(parent2, node1);
         } else {
             PUT_RIGHT(parent2, node1);
         }
     if (parent1!=0) {
-        if(GET_SIZE(node1)<=GET_SIZE(parent1)) {
+        if(node1==GET_LEFT_CHILD(parent1)) {
             PUT_LEFT(parent1, node2);
         } else {
             PUT_RIGHT(parent1, node2);
@@ -635,7 +635,7 @@ void swapChild(void* parent, void* child) {
             PUT_PARENT(right2, parent);
         }
         //
-        if(grandparent!=0 && GET_SIZE(parent)<=GET_SIZE(grandparent)) {
+        if(grandparent!=0 && parent==GET_LEFT_CHILD(grandparent)) {
             PUT_LEFT(grandparent, child);
         } else if (grandparent!=0) {
             PUT_RIGHT(grandparent, child);
@@ -668,7 +668,7 @@ void swapChild(void* parent, void* child) {
             PUT_PARENT(right2, child);
         }
         
-        if(grandparent!=0 && GET_SIZE(parent)<=GET_SIZE(grandparent)) {
+        if(grandparent!=0 && parent==GET_LEFT_CHILD(grandparent)) {
             PUT_LEFT(grandparent, child);
         } else if (grandparent!=0) {
             PUT_RIGHT(grandparent, child);
@@ -751,7 +751,6 @@ void insertRecolor(void* newNode) {
 
     //general cases now
     char* uncle;
-    //CHANGE TO CHECK USING SIZES LOL
     if (GET_LEFT_CHILD(grandparent)==parent) {
         uncle=GET_RIGHT_CHILD(grandparent);
     } else {
@@ -775,7 +774,7 @@ void insertRecolor(void* newNode) {
     //these transformations work irregardless of uncle 
     //now we know uncle is black and have to make some rotations accordingly
     //first case we are left child of parent who is left child of grandparent
-    if (GET_SIZE(newNode)<=GET_SIZE(parent) && GET_SIZE(parent)<= GET_SIZE(grandparent)) {
+    if (newNode==GET_LEFT_CHILD(parent) && parent== GET_LEFT_CHILD(grandparent)) {
         //rotate parent up to the right and color parent black and grandparent red
         rightRotate(grandparent);
         PUT_COLOR(parent, 0);
@@ -784,7 +783,7 @@ void insertRecolor(void* newNode) {
     }
 
     //second case we are right child of parent who is left child of grandparent
-    if(GET_SIZE(newNode)>GET_SIZE(parent) && GET_SIZE(parent)<=GET_SIZE(grandparent)) {
+    if(newNode==GET_RIGHT_CHILD(parent) && parent==GET_LEFT_CHILD(grandparent)) {
         //after left rotation we have same as previous case but neNode and parent are swapped.
         leftRotate(parent);
         rightRotate(grandparent);
@@ -794,7 +793,7 @@ void insertRecolor(void* newNode) {
     }
 
     //third case we are right child of parent who is right child of grandparent
-    if(GET_SIZE(newNode)>GET_SIZE(parent) && GET_SIZE(parent)>GET_SIZE(grandparent)) {
+    if(newNode==GET_RIGHT_CHILD(parent) && parent==GET_RIGHT_CHILD(grandparent)) {
         leftRotate(grandparent);
         PUT_COLOR(parent, 0);
         PUT_COLOR(grandparent, 1);
@@ -905,7 +904,7 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
 
     if(GET_COLOR(sibling)==1) {
         //if you're red you have two children and they are both black and not null by tree rules
-        if (GET_SIZE(sibling)<=GET_SIZE(parent)) {
+        if (sibling==GET_LEFT_CHILD(parent)) {
             rightRotate(parent);
         } else {
             leftRotate(parent);
@@ -922,7 +921,7 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
         char* right=GET_RIGHT_CHILD(sibling);
         //one red child case (MAYBE NEED TO DO A CoLOR BASED ON ~GET_COLOR(PARENT))
         if (GET_COLOR(left)==1) {
-            if(GET_SIZE(sibling)<=GET_SIZE(parent)) {
+            if(sibling==GET_LEFT_CHILD(parent)) {
                 rightRotate(parent);
                 PUT_COLOR(sibling, GET_COLOR(parent));
                 PUT_COLOR(left, 0);
@@ -940,7 +939,7 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
             }
         }
         if(GET_COLOR(right)==1 ) {
-            if(GET_SIZE(sibling)<=GET_SIZE(parent)) {
+            if(sibling==GET_LEFT_CHILD(parent)) {
                 leftRotate(sibling);
                 PUT_COLOR(sibling, 1);
                 PUT_COLOR(right, 0);
@@ -968,7 +967,7 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
     //now we know its one child handle left and right case
     if(GET_LEFT_CHILD(sibling)==0) {
         char* right=GET_RIGHT_CHILD(sibling);
-         if(GET_SIZE(sibling)<=GET_SIZE(parent)) {
+         if(sibling==GET_LEFT_CHILD(parent)) {
             leftRotate(sibling);
             PUT_COLOR(sibling, 1);
             PUT_COLOR(right, 0);
@@ -989,7 +988,7 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
 
     if(GET_RIGHT_CHILD(sibling)==0) {
         char* left=GET_LEFT_CHILD(sibling);
-        if(GET_SIZE(sibling)<=GET_SIZE(parent)) {
+        if(sibling==GET_LEFT_CHILD(parent)) {
             rightRotate(parent);
             PUT_COLOR(sibling, GET_COLOR(parent));
             PUT_COLOR(left, 0);
