@@ -35,6 +35,8 @@
 #define SIZECROSS  512
 #define SEGSIZE    488
 #define SEGBASE    61
+#define RED       1
+#define BLACK     0
  
 #define GET(p)          (*(unsigned long int *)(p))
 #define GET_SIZE(p)     (GET(p) & ~0x7)
@@ -82,6 +84,95 @@ static void reset(void)
     mm_init();
 }
 extern char* rootMain;
+
+/* ------------------------------------------------------------------ */
+/* RB-tree invariant checker                                           */
+/* ------------------------------------------------------------------ */
+ /* Helper to check for cycles and basic BST properties */
+int check_tree_integrity(void* root, int depth_limit) {
+    if (root == 0) return 1;
+    if (depth_limit <= 0) {
+        printf("Error: Tree depth exceeded limit (possible infinite loop/cycle)\n");
+        return 0;
+    }
+
+    void* left = (void*)GET_LEFT_CHILD(root);
+    void* right = (void*)GET_RIGHT_CHILD(root);
+
+    // Check Parent Linkage: if child exists, its parent MUST be this node
+    if (left != 0 && (void*)GET_PARENT(left) != root) {
+        printf("Error: Left child %p parent mismatch (points to %p, expected %p)\n", 
+               left, (void*)GET_PARENT(left), root);
+        return 0;
+    }
+    if (right != 0 && (void*)GET_PARENT(right) != root) {
+        printf("Error: Right child %p parent mismatch\n", right);
+        return 0;
+    }
+
+    return check_tree_integrity(left, depth_limit - 1) && 
+           check_tree_integrity(right, depth_limit - 1);
+}
+/* Returns the black-height of the subtree, or -1 on violation. */
+static int check_subtree(void *node, void *parent)
+{
+    if (node == 0) return 1;   /* null counts as 1 black node */
+ 
+    /* Parent pointer must be consistent */
+    if ((void *)GET_PARENT(node) != parent) {
+        printf("  FAIL: parent pointer mismatch at node size=%lu\n",
+               GET_SIZE(node));
+        return -1;
+    }
+ 
+    /* Red node must not have a red child */
+    if (GET_COLOR(node) == RED) {
+        void *l = (void *)GET_LEFT_CHILD(node);
+        void *r = (void *)GET_RIGHT_CHILD(node);
+        if ((l && GET_COLOR(l) == RED) || (r && GET_COLOR(r) == RED)) {
+            printf("  FAIL: red-red violation at node size=%lu\n",
+                   GET_SIZE(node));
+            return -1;
+        }
+    }
+ 
+    /* BST order */
+    void *l = (void *)GET_LEFT_CHILD(node);
+    void *r = (void *)GET_RIGHT_CHILD(node);
+    if (l && GET_SIZE(l) > GET_SIZE(node)) {
+        printf("  FAIL: BST violation (left > node) at size=%lu\n",
+               GET_SIZE(node));
+        return -1;
+    }
+    if (r && GET_SIZE(r) < GET_SIZE(node)) {
+        printf("  FAIL: BST violation (right < node) at size=%lu\n",
+               GET_SIZE(node));
+        return -1;
+    }
+ 
+    int bh_l = check_subtree(l, node);
+    int bh_r = check_subtree(r, node);
+ 
+    if (bh_l == -1 || bh_r == -1) return -1;
+    if (bh_l != bh_r) {
+        printf("  FAIL: black-height mismatch at node size=%lu (%d vs %d)\n",
+               GET_SIZE(node), bh_l, bh_r);
+        return -1;
+    }
+    return bh_l + (GET_COLOR(node) == BLACK ? 1 : 0);
+}
+ 
+/* Returns 1 if tree rooted at root is a valid RB-tree, 0 otherwise */
+static int is_valid_rbt(void *root)
+{
+    if (root == 0) return 1;
+    if (GET_COLOR(root) != BLACK) {
+        printf("  FAIL: root is not black\n");
+        return 0;
+    }
+    return check_subtree(root, 0) != -1;
+}
+ 
 /* ------------------------------------------------------------------ */
 /* Heap consistency checker                                             */
 /* ------------------------------------------------------------------ */
@@ -149,6 +240,11 @@ static int heap_consistent(void)
  
         prev_free = !alloc;
         bp += sz;
+    }
+
+    if(!(is_valid_rbt(rootMain))) {
+        ok=0;
+        printf("Binary Tree is Invalid\n");
     }
     return ok;
 }
@@ -965,6 +1061,58 @@ static void test_trace_64bit_minsize(void)
     else
         FAIL("block too small for 64-bit free-list pointers");
 }
+
+void test_tree_identical_sizes() {
+    printf("Running: test_tree_identical_sizes...");
+    mem_reset();
+    mm_init();
+
+    void* ptrs[50];
+    size_t big_size = 1024; // Must be > SIZECROSS (512) to use the tree
+
+    // 1. Fill the tree with blocks of the EXACT same size
+    for (int i = 0; i < 50; i++) {
+        ptrs[i] = mm_malloc(big_size);
+    }
+
+    // 2. Free them to force tree insertions and rotations
+    for (int i = 0; i < 50; i++) {
+        mm_free(ptrs[i]);
+        // This will likely hang or segfault if rotations use size-comparisons
+        if (!check_tree_integrity(rootMain, 100)) {
+            exit(1); 
+        }
+    }
+    printf("Passed!\n");
+}
+
+void test_tree_fragmentation_stress() {
+    printf("Running: test_tree_fragmentation_stress...");
+    mem_reset();
+    mm_init();
+
+    void* small[100];
+    void* large[100];
+
+    // Interleave small (array-based) and large (tree-based) blocks
+    for (int i = 0; i < 100; i++) {
+        small[i] = mm_malloc(64); 
+        large[i] = mm_malloc(2048 + (i % 8)); // Slightly different sizes
+    }
+
+    // Free large blocks in reverse order to trigger complex rotations
+    for (int i = 99; i >= 0; i--) {
+        mm_free(large[i]);
+        if (!check_tree_integrity(rootMain, 200)) exit(1);
+    }
+
+    // Re-allocate to ensure the tree didn't "lose" any memory
+    for (int i = 0; i < 100; i++) {
+        large[i] = mm_malloc(2000);
+        assert(large[i] != NULL);
+    }
+    printf("Passed!\n");
+}
 /* ------------------------------------------------------------------ */
 /* main                                                                 */
 /* ------------------------------------------------------------------ */
@@ -1039,6 +1187,10 @@ int main(void)
     test_trace_consecutive_large_coalesce();
     test_trace_64bit_minsize();
     testFullTrace();
+
+    printf("\n--- Stress Tests (gemini) ---\n");
+    test_tree_identical_sizes();
+    test_tree_fragmentation_stress();
  
     printf("\n============================================================\n");
     printf("  Results: %d / %d passed\n", tests_passed, tests_run);
