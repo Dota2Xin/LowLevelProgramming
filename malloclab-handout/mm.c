@@ -1,4 +1,3 @@
-//mdriver -V -f short1-bal.rep
 /*
  * mm-naive.c - The fastest, least memory-efficient malloc package.
  * 
@@ -148,10 +147,14 @@ int mm_init(void)
 {
     //initialize the heap and the prologue+epilogue blocks
     size_t heapSize=0;
+    extendSize=CHUNKSIZE;
     heapStart=mem_heap_lo();
     char* dump=mem_sbrk(CHUNKSIZE);
     heapSize=CHUNKSIZE;
     segregatedList=heapStart;
+    for(int i=0; i<SEGBASE; i++) {
+        PUT(segregatedList+i, 0);
+    }
     PUT(heapStart+SEGSIZE,PACK(2*DSIZE, 1));
     PUT(heapStart+SEGSIZE+DSIZE, PACK(2*DSIZE, 1));    
     char* heapEnd=mem_heap_hi();
@@ -160,7 +163,7 @@ int mm_init(void)
     heapSize-=SEGSIZE+3*DSIZE;
     //initialize our root node for the red black tree
     rootMain=heapStart+SEGSIZE+2*DSIZE;
-    PUT(rootMain, PACK_COLOR(heapSize, 0, 1));
+    PUT(rootMain, PACK_COLOR(heapSize, 0, 0));
     PUT_LEFT(rootMain, 0);
     PUT_RIGHT(rootMain, 0);
     PUT_PARENT(rootMain, 0);
@@ -282,7 +285,7 @@ void* breakTree(size_t size) {
     if (nodePointer==0) {
         //printf("I aint hit back mb\n");
         //printf("Sizgin %lu", size);
-        nodePointer=extendHeap(size);
+        nodePointer=extendHeap(size+CHUNKSIZE);
         return nodePointer;
     }
 
@@ -423,7 +426,7 @@ void* extendHeap(size_t requested) {
     char* boundary=mem_sbrk(growSize);
     PUT(boundary-DSIZE, PACK(DSIZE,0)); //remove old epilogue block
     char checkPrev=GET_ALLOC(boundary-2*DSIZE);
-    if (checkPrev) {
+    if (checkPrev==0) {
         //get the previous block which we now know is free from checkprev
         char* prevBlock=boundary-DSIZE-GET_SIZE(boundary-2*DSIZE);
         size_t prevSize=GET_SIZE(prevBlock);
@@ -435,7 +438,7 @@ void* extendHeap(size_t requested) {
         //make new free block+epilogue block
         size_t newSize=prevSize+growSize;
         PUT(prevBlock, PACK(newSize, 0));
-        PUT(prevBlock+newSize, PACK(newSize, 0));
+        PUT(prevBlock+newSize-DSIZE, PACK(newSize, 0));
         PUT(boundary+growSize-DSIZE, PACK(DSIZE, 1));
 
         extendSize = ALIGN(growSize + growSize / 3);
