@@ -613,6 +613,7 @@ void swap(void* node1, void* node2) {
 }
 
 //for the special case swap breaks when you swap directly with your child 
+//UPDATE SIBLING AS WELL (OR MAYBE IT DOES THAT?)
 void swapChild(void* parent, void* child) {
     if (child==GET_LEFT_CHILD(parent)) {
         char* right1=GET_RIGHT_CHILD(parent);
@@ -708,6 +709,7 @@ void baseAdd(void* root, void* newNode, size_t size) {
             PUT_RIGHT(newNode, 0);
             PUT_PARENT(newNode, root);
         }
+        return;
     }
 
     if(GET_SIZE(root)>=size) {
@@ -719,6 +721,7 @@ void baseAdd(void* root, void* newNode, size_t size) {
             PUT_RIGHT(newNode, 0);
             PUT_PARENT(newNode, root);
         }
+        return;
     }
 }
 /*
