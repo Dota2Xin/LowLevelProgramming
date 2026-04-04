@@ -1108,9 +1108,9 @@ void test_tree_fragmentation_stress() {
 
     // Re-allocate to ensure the tree didn't "lose" any memory
     for (int i = 0; i < 100; i++) {
-        printf("Here 3, %i\n", i);
+        //printf("Here 3, %i\n", i);
         if(!(is_valid_rbt(rootMain))) {
-            print_binary_tree(rootMain);
+            //print_binary_tree(rootMain);
         }
         //print_binary_tree(rootMain);
         large[i] = mm_malloc(2000);

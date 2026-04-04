@@ -614,7 +614,7 @@ void swap(void* node1, void* node2) {
 
 //for the special case swap breaks when you swap directly with your child 
 void swapChild(void* parent, void* child) {
-    if (GET_SIZE(child)<=GET_SIZE(parent)) {
+    if (child==GET_LEFT_CHILD(parent)) {
         char* right1=GET_RIGHT_CHILD(parent);
         char* grandparent=GET_PARENT(parent);
         char* right2=GET_RIGHT_CHILD(child);
@@ -661,11 +661,11 @@ void swapChild(void* parent, void* child) {
         }
         PUT_LEFT(parent, left2);
         if(left2!=0) {
-            PUT_PARENT(left2, child);
+            PUT_PARENT(left2, parent);
         }
         PUT_RIGHT(parent, right2);
         if(right2!=0) {
-            PUT_PARENT(right2, child);
+            PUT_PARENT(right2, parent);
         }
         
         if(grandparent!=0 && parent==GET_LEFT_CHILD(grandparent)) {
@@ -911,7 +911,7 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
         }
         PUT_COLOR(parent, 1);
         PUT_COLOR(sibling, 0);
-        handleColoringDelete(parent, 1);
+        handleColoringDelete(parent, nullCheck);
         return;
     }
 
