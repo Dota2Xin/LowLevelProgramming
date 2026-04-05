@@ -75,8 +75,8 @@ void print_op(Op *op) {
      * %4d   : Pads the ID to 4 digits for alignment
      * %zu   : The correct format specifier for size_t
      */
-    printf("Type: %-7s | ID: %4d | Size: %zu\n", 
-            type_str, op->id, op->size);
+    //printf("Type: %-7s | ID: %4d | Size: %zu\n", 
+    //        type_str, op->id, op->size);
 }
  
 /* ------------------------------------------------------------------ */

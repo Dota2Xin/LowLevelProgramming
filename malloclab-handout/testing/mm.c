@@ -914,7 +914,11 @@ void handleColoringDelete(void* colorNode, char nullCheck) {
         }
         PUT_COLOR(parent, 1);
         PUT_COLOR(sibling, 0);
-        handleColoringDelete(parent, nullCheck);
+        if (nullCheck==0) {
+            handleColoringDelete(colorNode, 0);
+        } else {
+            handleColoringDelete(parent, 1);
+        }
         return;
     }
 
@@ -1079,6 +1083,7 @@ void deleteRecolor(void* removeNode) {
                 PUT_COLOR(right, 0);
             }
             handleColoringDelete(right, 0);
+            return;
         }
 
     }

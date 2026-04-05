@@ -1,0 +1,301 @@
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+ no time accumulated
+
+  %   cumulative   self              self     total           
+ time   seconds   seconds    calls  Ts/call  Ts/call  name    
+  0.00      0.00     0.00   191312     0.00     0.00  addFree
+  0.00      0.00     0.00   159224     0.00     0.00  addNode
+  0.00      0.00     0.00   159080     0.00     0.00  baseRemove
+  0.00      0.00     0.00   159080     0.00     0.00  deleteRecolor
+  0.00      0.00     0.00   159080     0.00     0.00  insertRecolor
+  0.00      0.00     0.00    96000     0.00     0.00  addBlockArray
+  0.00      0.00     0.00    96000     0.00     0.00  coalesce
+  0.00      0.00     0.00    96000     0.00     0.00  mm_free
+  0.00      0.00     0.00    96000     0.00     0.00  mm_malloc
+  0.00      0.00     0.00    95440     0.00     0.00  breakTree
+  0.00      0.00     0.00    32744     0.00     0.00  removeElement
+  0.00      0.00     0.00     6344     0.00     0.00  leftRotate
+  0.00      0.00     0.00     6184     0.00     0.00  rightRotate
+  0.00      0.00     0.00     5864     0.00     0.00  swapChild
+  0.00      0.00     0.00     3632     0.00     0.00  handleColoringDelete
+  0.00      0.00     0.00     1408     0.00     0.00  swap
+  0.00      0.00     0.00      656     0.00     0.00  makeFree
+  0.00      0.00     0.00      136     0.00     0.00  mem_sbrk
+  0.00      0.00     0.00      128     0.00     0.00  extendHeap
+  0.00      0.00     0.00        8     0.00     0.00  load_trace
+  0.00      0.00     0.00        8     0.00     0.00  mem_heap_hi
+  0.00      0.00     0.00        8     0.00     0.00  mem_heap_lo
+  0.00      0.00     0.00        8     0.00     0.00  mem_reset
+  0.00      0.00     0.00        8     0.00     0.00  mm_init
+  0.00      0.00     0.00        6     0.00     0.00  run_libc
+  0.00      0.00     0.00        3     0.00     0.00  mem_heapsize
+  0.00      0.00     0.00        1     0.00     0.00  mem_init
+
+ %         the percentage of the total running time of the
+time       program used by this function.
+
+cumulative a running sum of the number of seconds accounted
+ seconds   for by this function and those listed above it.
+
+ self      the number of seconds accounted for by this
+seconds    function alone.  This is the major sort for this
+           listing.
+
+calls      the number of times this function was invoked, if
+           this function is profiled, else blank.
+
+ self      the average number of milliseconds spent in this
+ms/call    function per call, if this function is profiled,
+	   else blank.
+
+ total     the average number of milliseconds spent in this
+ms/call    function and its descendents per call, if this
+	   function is profiled, else blank.
+
+name       the name of the function.  This is the minor sort
+           for this listing. The index shows the location of
+	   the function in the gprof listing. If the index is
+	   in parenthesis it shows where it would appear in
+	   the gprof listing if it were to be printed.
+
+Copyright (C) 2012-2024 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
+		     Call graph (explanation follows)
+
+
+granularity: each sample hit covers 4 byte(s) no time propagated
+
+index % time    self  children    called     name
+                0.00    0.00   24000/191312      main [38]
+                0.00    0.00   72000/191312      load_trace [20]
+                0.00    0.00   95312/191312      breakTree [10]
+[1]      0.0    0.00    0.00  191312         addFree [1]
+-----------------------------------------------
+                0.00    0.00     128/159224      addBlockArray [6]
+                0.00    0.00   15978/159224      main [38]
+                0.00    0.00   47934/159224      load_trace [20]
+                0.00    0.00   95184/159224      breakTree [10]
+[2]      0.0    0.00    0.00  159224         addNode [2]
+                0.00    0.00  159080/159080      insertRecolor [5]
+-----------------------------------------------
+                0.00    0.00   63896/159080      coalesce [7]
+                0.00    0.00   95184/159080      breakTree [10]
+[3]      0.0    0.00    0.00  159080         baseRemove [3]
+                0.00    0.00    5864/5864        swapChild [14]
+                0.00    0.00    1408/1408        swap [16]
+-----------------------------------------------
+                0.00    0.00   63896/159080      coalesce [7]
+                0.00    0.00   95184/159080      breakTree [10]
+[4]      0.0    0.00    0.00  159080         deleteRecolor [4]
+-----------------------------------------------
+                0.00    0.00  159080/159080      addNode [2]
+[5]      0.0    0.00    0.00  159080         insertRecolor [5]
+                0.00    0.00    2824/6344        leftRotate [12]
+                0.00    0.00    2752/6184        rightRotate [13]
+-----------------------------------------------
+                0.00    0.00   24000/96000       main [38]
+                0.00    0.00   72000/96000       load_trace [20]
+[6]      0.0    0.00    0.00   96000         addBlockArray [6]
+                0.00    0.00   95440/95440       breakTree [10]
+                0.00    0.00     656/656         makeFree [17]
+                0.00    0.00     560/32744       removeElement [11]
+                0.00    0.00     128/159224      addNode [2]
+                0.00    0.00     128/128         extendHeap [19]
+-----------------------------------------------
+                0.00    0.00   96000/96000       mm_free [8]
+[7]      0.0    0.00    0.00   96000         coalesce [7]
+                0.00    0.00   63896/159080      baseRemove [3]
+                0.00    0.00   63896/159080      deleteRecolor [4]
+                0.00    0.00   32088/32744       removeElement [11]
+                0.00    0.00    3632/3632        handleColoringDelete [15]
+-----------------------------------------------
+                0.00    0.00   24000/96000       main [38]
+                0.00    0.00   72000/96000       load_trace [20]
+[8]      0.0    0.00    0.00   96000         mm_free [8]
+                0.00    0.00   96000/96000       coalesce [7]
+-----------------------------------------------
+                0.00    0.00   24000/96000       main [38]
+                0.00    0.00   72000/96000       load_trace [20]
+[9]      0.0    0.00    0.00   96000         mm_malloc [9]
+-----------------------------------------------
+                0.00    0.00   95440/95440       addBlockArray [6]
+[10]     0.0    0.00    0.00   95440         breakTree [10]
+                0.00    0.00   95312/191312      addFree [1]
+                0.00    0.00   95184/159224      addNode [2]
+                0.00    0.00   95184/159080      deleteRecolor [4]
+                0.00    0.00   95184/159080      baseRemove [3]
+-----------------------------------------------
+                0.00    0.00      96/32744       extendHeap [19]
+                0.00    0.00     560/32744       addBlockArray [6]
+                0.00    0.00   32088/32744       coalesce [7]
+[11]     0.0    0.00    0.00   32744         removeElement [11]
+-----------------------------------------------
+                0.00    0.00    2824/6344        insertRecolor [5]
+                0.00    0.00    3520/6344        handleColoringDelete [15]
+[12]     0.0    0.00    0.00    6344         leftRotate [12]
+-----------------------------------------------
+                0.00    0.00    2752/6184        insertRecolor [5]
+                0.00    0.00    3432/6184        handleColoringDelete [15]
+[13]     0.0    0.00    0.00    6184         rightRotate [13]
+-----------------------------------------------
+                0.00    0.00    5864/5864        baseRemove [3]
+[14]     0.0    0.00    0.00    5864         swapChild [14]
+-----------------------------------------------
+                0.00    0.00    3632/3632        coalesce [7]
+[15]     0.0    0.00    0.00    3632         handleColoringDelete [15]
+                0.00    0.00    3520/6344        leftRotate [12]
+                0.00    0.00    3432/6184        rightRotate [13]
+-----------------------------------------------
+                0.00    0.00    1408/1408        baseRemove [3]
+[16]     0.0    0.00    0.00    1408         swap [16]
+-----------------------------------------------
+                0.00    0.00     656/656         addBlockArray [6]
+[17]     0.0    0.00    0.00     656         makeFree [17]
+-----------------------------------------------
+                0.00    0.00       8/136         mm_init [24]
+                0.00    0.00     128/136         extendHeap [19]
+[18]     0.0    0.00    0.00     136         mem_sbrk [18]
+-----------------------------------------------
+                0.00    0.00     128/128         addBlockArray [6]
+[19]     0.0    0.00    0.00     128         extendHeap [19]
+                0.00    0.00     128/136         mem_sbrk [18]
+                0.00    0.00      96/32744       removeElement [11]
+-----------------------------------------------
+                0.00    0.00       8/8           main [38]
+[20]     0.0    0.00    0.00       8         load_trace [20]
+                0.00    0.00   72000/96000       addBlockArray [6]
+                0.00    0.00   72000/96000       mm_malloc [9]
+                0.00    0.00   72000/191312      addFree [1]
+                0.00    0.00   72000/96000       mm_free [8]
+                0.00    0.00   47934/159224      addNode [2]
+-----------------------------------------------
+                0.00    0.00       8/8           mm_init [24]
+[21]     0.0    0.00    0.00       8         mem_heap_hi [21]
+-----------------------------------------------
+                0.00    0.00       8/8           mm_init [24]
+[22]     0.0    0.00    0.00       8         mem_heap_lo [22]
+-----------------------------------------------
+                0.00    0.00       8/8           main [38]
+[23]     0.0    0.00    0.00       8         mem_reset [23]
+-----------------------------------------------
+                0.00    0.00       8/8           main [38]
+[24]     0.0    0.00    0.00       8         mm_init [24]
+                0.00    0.00       8/8           mem_heap_lo [22]
+                0.00    0.00       8/136         mem_sbrk [18]
+                0.00    0.00       8/8           mem_heap_hi [21]
+-----------------------------------------------
+                0.00    0.00       6/6           main [38]
+[25]     0.0    0.00    0.00       6         run_libc [25]
+-----------------------------------------------
+                0.00    0.00       3/3           main [38]
+[26]     0.0    0.00    0.00       3         mem_heapsize [26]
+-----------------------------------------------
+                0.00    0.00       1/1           main [38]
+[27]     0.0    0.00    0.00       1         mem_init [27]
+-----------------------------------------------
+
+ This table describes the call tree of the program, and was sorted by
+ the total amount of time spent in each function and its children.
+
+ Each entry in this table consists of several lines.  The line with the
+ index number at the left hand margin lists the current function.
+ The lines above it list the functions that called this function,
+ and the lines below it list the functions this one called.
+ This line lists:
+     index	A unique number given to each element of the table.
+		Index numbers are sorted numerically.
+		The index number is printed next to every function name so
+		it is easier to look up where the function is in the table.
+
+     % time	This is the percentage of the `total' time that was spent
+		in this function and its children.  Note that due to
+		different viewpoints, functions excluded by options, etc,
+		these numbers will NOT add up to 100%.
+
+     self	This is the total amount of time spent in this function.
+
+     children	This is the total amount of time propagated into this
+		function by its children.
+
+     called	This is the number of times the function was called.
+		If the function called itself recursively, the number
+		only includes non-recursive calls, and is followed by
+		a `+' and the number of recursive calls.
+
+     name	The name of the current function.  The index number is
+		printed after it.  If the function is a member of a
+		cycle, the cycle number is printed between the
+		function's name and the index number.
+
+
+ For the function's parents, the fields have the following meanings:
+
+     self	This is the amount of time that was propagated directly
+		from the function into this parent.
+
+     children	This is the amount of time that was propagated from
+		the function's children into this parent.
+
+     called	This is the number of times this parent called the
+		function `/' the total number of times the function
+		was called.  Recursive calls to the function are not
+		included in the number after the `/'.
+
+     name	This is the name of the parent.  The parent's index
+		number is printed after it.  If the parent is a
+		member of a cycle, the cycle number is printed between
+		the name and the index number.
+
+ If the parents of the function cannot be determined, the word
+ `<spontaneous>' is printed in the `name' field, and all the other
+ fields are blank.
+
+ For the function's children, the fields have the following meanings:
+
+     self	This is the amount of time that was propagated directly
+		from the child into the function.
+
+     children	This is the amount of time that was propagated from the
+		child's children to the function.
+
+     called	This is the number of times the function called
+		this child `/' the total number of times the child
+		was called.  Recursive calls by the child are not
+		listed in the number after the `/'.
+
+     name	This is the name of the child.  The child's index
+		number is printed after it.  If the child is a
+		member of a cycle, the cycle number is printed
+		between the name and the index number.
+
+ If there are any cycles (circles) in the call graph, there is an
+ entry for the cycle-as-a-whole.  This entry shows who called the
+ cycle (as parents) and the members of the cycle (as children.)
+ The `+' recursive calls entry shows the number of function calls that
+ were internal to the cycle, and the calls entry for each member shows,
+ for that member, how many times it was called from other members of
+ the cycle.
+
+Copyright (C) 2012-2024 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
+Index by function name
+
+   [6] addBlockArray           [5] insertRecolor          [18] mem_sbrk
+   [1] addFree                [12] leftRotate              [8] mm_free
+   [2] addNode                [20] load_trace (perf_test.c) [24] mm_init
+   [3] baseRemove             [17] makeFree                [9] mm_malloc
+  [10] breakTree              [21] mem_heap_hi            [11] removeElement
+   [7] coalesce               [22] mem_heap_lo            [13] rightRotate
+   [4] deleteRecolor          [26] mem_heapsize           [25] run_libc (perf_test.c)
+  [19] extendHeap             [27] mem_init               [16] swap
+  [15] handleColoringDelete   [23] mem_reset              [14] swapChild
